@@ -1,0 +1,67 @@
+Name	Sequence	Warnings	Network Genes	Network Nodes	Network Edges	
+thrL_0	ATGGATGTTGTG	['thrA', 'thrL', 'thrB', 'thrC']	4	6
+thrL_1	CATGGATGTTGT	
+thrL_2	TCATGGATGTTG	
+thrL_3	TTCATGGATGTT	
+thrL_4	TTTCATGGATGT	
+thrL_5	GTTTCATGGATG	
+thrL_6	CGTTTCATGGAT	
+thrL_7	GCGTTTCATGGA	
+thrL_8	TGCGTTTCATGG	
+thrL_9	ATGCGTTTCATG	
+thrL_10	AATGCGTTTCAT	
+thrA_0	ATGGTTGTTACC	['thrA', 'thrL', 'thrB', 'thrC', 'yaaX', 'dapB', 'kefC', 'leuB', 'leuA', 'secA', 'mmuM', 'cysS', 'ybdL', 'asnB', 'aroA', 'aspC', 'asnS', 'rutD', 'trpC', 'trpD', 'malY', 'ansA', 'tsaB', 'sdaA', 'hisG', 'hisC', 'hisB', 'hisH', 'hisA', 'hisF', 'hisI', 'usg', 'aroC', 'alaC', 'dapA', 'purL', 'nadB', 'pheA', 'tyrA', 'luxS', 'sdaB', 'lysA', 'recJ', 'ansB', 'metC', 'hldE', 'argG', 'folP', 'kefB', 'asd', 'cysE', 'asnA', 'ilvE', 'ilvC', 'metE', 'metJ', 'metB', 'metL', 'metF', 'argC', 'argH', 'metA', 'metH', 'lysC', 'aspA', 'nnr', 'purA', 'pyrI', 'pyrB', 'rraB', 'tdcG']	71	436
+thrA_1	CATGGTTGTTAC	
+thrA_2	GCATGGTTGTTA	
+thrA_3	CGCATGGTTGTT	
+thrA_4	TCGCATGGTTGT	
+thrA_5	CTCGCATGGTTG	
+thrA_6	ACTCGCATGGTT	
+thrA_7	CACTCGCATGGT	
+thrA_8	ACACTCGCATGG	
+thrA_9	AACACTCGCATG	
+thrA_10	CAACACTCGCAT	
+thrB_0	ATGTCAGACTCC	['thrA', 'thrL', 'thrB', 'thrC', 'yaaX', 'mmuM', 'ribD', 'aroA', 'malY', 'sdaA', 'proQ', 'hisG', 'hisC', 'usg', 'aroC', 'purM', 'pheA', 'tyrA', 'luxS', 'sdaB', 'metC', 'nlpI', 'gltB', 'asd', 'cysE', 'ilvE', 'ilvC', 'metE', 'metB', 'metL', 'metH', 'lysC', 'nnr', 'tdcG']	34	160
+thrB_1	CATGTCAGACTC	
+thrB_2	CCATGTCAGACT	
+thrB_3	ACCATGTCAGAC	
+thrB_4	AACCATGTCAGA	
+thrB_5	TAACCATGTCAG	
+thrB_6	TTAACCATGTCA	
+thrB_7	TTTAACCATGTC	
+thrB_8	CTTTAACCATGT	
+thrB_9	ACTTTAACCATG	
+thrB_10	AACTTTAACCAT	
+thrC_0	ATTTAGTTTTCC	['thrA', 'thrL', 'thrB', 'thrC', 'yaaX', 'pdxA', 'leuD', 'leuB', 'ilvI', 'ilvH', 'ltaE', 'serC', 'trpA', 'trpB', 'hisG', 'hisC', 'hisB', 'hisI', 'usg', 'pheA', 'tdcB', 'asd', 'tdh', 'ilvN', 'ilvD', 'ilvA', 'ilvC', 'metL', 'lysC']	29	156
+thrC_1	CATTTAGTTTTC	
+thrC_2	TCATTTAGTTTT	
+thrC_3	TTCATTTAGTTT	
+thrC_4	TTTCATTTAGTT	
+thrC_5	GTTTCATTTAGT	
+thrC_6	AGTTTCATTTAG	
+thrC_7	GAGTTTCATTTA	
+thrC_8	AGAGTTTCATTT	
+thrC_9	TAGAGTTTCATT	
+thrC_10	GTAGAGTTTCAT	
+yaaX_0	ACAGGTTACTCC	['thrB', 'thrA', 'thrC', 'yaaX', 'ybgO', 'ybiB', 'ybiJ', 'mcbA', 'ybjM', 'ybjO', 'elfG', 'gfcC', 'gfcB', 'csgC', 'opgC', 'thiK', 'bhsA', 'ycgR', 'pgpB', 'yciW', 'ydcX', 'marB', 'mliC', 'ydhQ', 'ydiV', 'ydiZ', 'yebO', 'yebY', 'yfbM', 'flk', 'yfcV', 'yfgJ', 'csiE', 'yfhG', 'ygbE', 'ppdC', 'cptA', 'mzrA', 'yqjK', 'yhcN', 'hofN', 'hofM', 'yhhA', 'panM', 'yhjY', 'wecH', 'yidX', 'yieE', 'yiiG', 'yjaH', 'mdtO', 'yjfN', 'ecnB', 'ghoT', 'yjjZ']	55	441
+yaaX_1	CACAGGTTACTC	
+yaaX_2	TCACAGGTTACT	
+yaaX_3	TTCACAGGTTAC	
+yaaX_4	TTTCACAGGTTA	
+yaaX_5	TTTTCACAGGTT	
+yaaX_6	TTTTTCACAGGT	
+yaaX_7	CTTTTTCACAGG	
+yaaX_8	TCTTTTTCACAG	
+yaaX_9	ATCTTTTTCACA	
+yaaX_10	CATCTTTTTCAC	
+yaaA_0	AGGACTGGATAT	High purine content	['yaaJ', 'yaaA', 'ribD', 'queF']	4	3
+yaaA_1	GGACTGGATATG	High purine content	
+yaaA_2	GACTGGATATGC	
+yaaA_3	ACTGGATATGCT	
+yaaA_4	CTGGATATGCTG	
+yaaA_5	TGGATATGCTGA	
+yaaA_6	GGATATGCTGAT	
+yaaA_7	GATATGCTGATT	
+yaaA_8	ATATGCTGATTC	
+yaaA_9	TATGCTGATTCT	
+yaaA_10	ATGCTGATTCTT	

@@ -1,0 +1,3 @@
+home	Z:/TA/PNA
+bash	C:/cygwin64/bin
+shell	cygwin
