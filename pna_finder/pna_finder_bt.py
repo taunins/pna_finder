@@ -5,7 +5,7 @@ import functools
 import os
 from collections import OrderedDict
 from . import pna_pipeline_bt
-import pna_finder_dev
+import pna_finder
 
 
 class pna_app:
@@ -973,7 +973,7 @@ def startup():
     warning_text = 'The file "start_info.txt" has been deleted or moved.'
 
     try:
-        start_handle = open('%s/start_info.txt' % pna_finder_dev.__path__[0], 'r')
+        start_handle = open('%s/start_info.txt' % pna_finder.__path__[0], 'r')
         warning_text = 'The file "start_info.txt" is improperly built.'
 
         start_dict = {}
