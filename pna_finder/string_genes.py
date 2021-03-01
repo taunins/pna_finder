@@ -106,20 +106,28 @@ def STRING_net(gene, species, max_nodes=500, required_score=400, exclude_tm=Fals
 
         else:
             interaction_list += [line_list]
-            direct_interaction_list += [g1, g2]
+            if gene in [g1, g2]:
+                direct_interaction_list += [g1, g2]
 
         line = response.readline().decode('utf-8')
 
+    pairs = []
     for interaction in interaction_list:
         g1, g2 = interaction[2], interaction[3]
+
+        if [g1, g2] in pairs or [g2, g1] in pairs:
+            continue
+        else:
+            pairs += [[g1, g2]]
 
         if g1 in direct_interaction_list and g2 in direct_interaction_list:
             if g1 not in net_genes:
                 net_genes.append(str(g1))
             if g2 not in net_genes:
                 net_genes.append(str(g2))
-
             edges += 1
+        else:  # For clustering coefficient calculation
+            interaction_list.remove(interaction)
 
     nodes = len(net_genes)
 

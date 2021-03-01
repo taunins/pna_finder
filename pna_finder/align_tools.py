@@ -1,5 +1,181 @@
 import subprocess
-from . import pna_tools
+
+
+def bashToWindows(path):
+    """
+    Provides workaround for Windows bash shell path handling, allowing Python subprocess.call functions to work on
+    bash shells in Windows
+    :param path: Cygwin or Windows bash path (e.g. str starting with '/cygdrive/c/...' or '/mnt/c/...'
+    :return: Windows path (e.g. str starting with 'C:/...')
+    """
+
+    if type(path) is str:
+        path_list = path.split('/')
+        if path_list[1] == 'cygdrive':
+            winpath = path_list[2].upper() + ':/' + '/'.join(path_list[3:])
+            return winpath
+        elif path_list[1] == 'mnt':
+            winpath = path_list[2].upper() + ':/' + '/'.join(path_list[3:])
+            return winpath
+        else:
+            raise ValueError('bashToWindows takes Windows bash shell file path, e.g. /cygdrive/c/... or /mnt/c/...')
+    else:
+        raise TypeError('bashToWindows takes string path input')
+
+
+def windowsToBash(path, shell_type):
+    """
+    Provides workaround for Windows bash shell path handling, allowing Python subprocess.call functions to work on
+    bash shells in Windows
+    :param path: Windows file path
+    :param shell_type: 'cygwin' or 'winbash'
+    :return:
+    """
+
+    if type(path) is str:
+        if '/' in path:
+            path_list = path.split('/')
+        elif '\\' in path:
+            path_list = path.split('\\')
+        else:
+            raise ValueError('windowsToBash takes Windows file path, e.g. C:/...')
+
+        if shell_type == 'cygwin':
+            try:
+                bashpath = '/cygdrive/' + path_list[0][0].lower() + '/' + '/'.join(path_list[1:])
+                return bashpath
+            except IndexError:
+                raise ValueError('windowsToBash takes Windows file path, e.g. C:/...')
+        elif shell_type == 'winbash':
+            try:
+                bashpath = '/mnt/' + path_list[0][0].lower() + '/' + '/'.join(path_list[1:])
+                return bashpath
+            except IndexError:
+                raise ValueError('windowsToBash takes Windows file path, e.g. C:/...')
+        else:
+            raise ValueError('windowsToBash takes Windows file path, e.g. C:/...')
+    else:
+        raise TypeError('windowsToBash takes string path input')
+
+
+def bowtie_build(fasta, refpath, err_file='bowtie-build.stderr',
+                 version=None,
+                 bash_sub=False, bash_dir='/',):
+    """
+    Construct bowtie indices (.ebwt files)
+    :param fasta: Path to FASTA containing reference sequences
+    :param refpath: Path to index base (e.g. C:/directory/e_coli_MG1655)
+    :param err_file: File path to where output is written
+    :param version: Enforces bowtie version number (e.g., '1.2.3')
+    :param bash_sub: False/cygwin/winbash
+    :param bash_dir: Location of bash.exe, if bash_sub not False
+    :return:
+    """
+
+    try:
+        if not bash_sub:
+            version_call = subprocess.check_output(['bowtie-build', '--version']).decode('utf-8')
+        else:
+            bash_check = ['%s/bash' % bash_dir, '--login', '-c', 'bowtie-build --version']
+            version_call = subprocess.check_output(bash_check).decode('utf-8')
+    except OSError:
+        raise RuntimeError('bowtie-build not found; check if it is installed and in $PATH\n')
+
+    local_version = version_call.split('\n')[0].split()[-1]
+    assert version == local_version, 'bowtie-build version incompatibility %s != %s' % (version, local_version)
+
+    # Change file formats for winbash option
+    if bash_sub == 'winbash':
+        fasta = windowsToBash(fasta, 'winbash')
+        refpath = windowsToBash(refpath, 'winbash')
+
+    # Make sure spaces in files are escaped for bash
+    if ' ' in fasta:
+        fasta = '"' + fasta + '"'
+
+    if ' ' in refpath:
+        refpath = '"' + refpath + '"'
+
+    # Initialize error/output file
+    err_handle = open(err_file, "w")
+
+    # Call bowtie-build
+    if not bash_sub:
+        subprocess.call(['bowtie-build', '-f', fasta, refpath],
+                        stdout=err_handle,
+                        stderr=subprocess.STDOUT)
+    else:
+        bash_call = ['%s/bash' % bash_dir, '--login', '-c', 'bowtie-build -f %s %s' % (fasta, refpath)]
+        subprocess.call(bash_call,
+                        stdout=err_handle,
+                        stderr=subprocess.STDOUT)
+
+    err_handle.close()
+
+
+def bowtie(fasta, refpath, samfile, flags, err_file='bowtie.stderr',
+           version=None,
+           bash_sub=False, bash_dir='/'):
+    """
+    Call bowtie2-align
+    :param fasta: fasta file for alignment
+    :param refpath: Path to bowtie index files (.bt2)
+    :param samfile: path to samfile output
+    :param flags: A list of bowtie flags such as ['-f', '-N', '0', '-L', '12', '-a']
+    :param err_file: File path to where output is written
+    :param version: Enforces bowtie version number
+    :param bash_sub: False/cygwin/winbash
+    :param bash_dir: Location of bash.exe, if bash_sub not False
+    :return:
+    """
+
+    # Check that we have access to bowtie
+    try:
+        if not bash_sub:
+            version_call = subprocess.check_output(['bowtie', '--version']).decode('utf-8')
+        else:
+            bash_check = ['%s/bash' % bash_dir, '--login', '-c', 'bowtie --version']
+            version_call = subprocess.check_output(bash_check).decode('utf-8')
+    except OSError:
+        raise RuntimeError('bowtie not found; check if it is installed and in $PATH\n')
+
+    # Check that version is the expected version
+    local_version = version_call.split('\n')[0].split()[-1]
+    assert version == local_version, 'bowtie version incompatibility %s != %s' % (version, local_version)
+
+    # Change file formats for winbash option
+    if bash_sub == 'winbash':
+        fasta = windowsToBash(fasta, 'winbash')
+        refpath = windowsToBash(refpath, 'winbash')
+        samfile = windowsToBash(samfile, 'winbash')
+
+    # Make sure spaces in files are escaped for bash
+    if ' ' in fasta:
+        fasta = '"' + fasta + '"'
+
+    if ' ' in refpath:
+        refpath = '"' + refpath + '"'
+
+    if ' ' in samfile:
+        samfile = '"' + samfile + '"'
+
+    # Initialize error/output file
+    err_handle = open(err_file, "w")
+
+    # Call bowtie2
+    bowtie_args = ['bowtie', refpath, fasta, '-S', samfile] + list(flags)
+
+    if not bash_sub:
+        subprocess.call(bowtie_args,
+                        stdout=err_handle,
+                        stderr=subprocess.STDOUT)
+    else:
+        bash_call = ['%s/bash' % bash_dir, '--login', '-c'] + [' '.join(bowtie_args)]
+        subprocess.call(bash_call,
+                        stdout=err_handle,
+                        stderr=subprocess.STDOUT)
+
+    err_handle.close()
 
 
 def bowtie2_build(fasta, refpath, err_file='bowtie2-build.stderr',
@@ -30,8 +206,8 @@ def bowtie2_build(fasta, refpath, err_file='bowtie2-build.stderr',
 
     # Change file formats for winbash option
     if bash_sub == 'winbash':
-        fasta = pna_tools.windowsToBash(fasta, 'winbash')
-        refpath = pna_tools.windowsToBash(refpath, 'winbash')
+        fasta = windowsToBash(fasta, 'winbash')
+        refpath = windowsToBash(refpath, 'winbash')
 
     # Make sure spaces in files are escaped for bash
     if ' ' in fasta:
@@ -62,8 +238,8 @@ def bowtie2(fasta, refpath, samfile, flags, err_file='bowtie2.stderr',
             bash_sub=False, bash_dir='/'):
     """
     Call bowtie2-align
+    :param fasta: fasta file for alignment
     :param refpath: Path to bowtie2 index files (.bt2)
-    :param fastas: list of unpaired reads/fasta files for alignment
     :param samfile: path to samfile output
     :param flags: A list of bowtie2 flags such as ['-f', '-N', '0', '-L', '12', '-a']
     :param err_file: File path to where output is written
@@ -89,9 +265,9 @@ def bowtie2(fasta, refpath, samfile, flags, err_file='bowtie2.stderr',
 
     # Change file formats for winbash option
     if bash_sub == 'winbash':
-        fasta = pna_tools.windowsToBash(fasta, 'winbash')
-        refpath = pna_tools.windowsToBash(refpath, 'winbash')
-        samfile = pna_tools.windowsToBash(samfile, 'winbash')
+        fasta = windowsToBash(fasta, 'winbash')
+        refpath = windowsToBash(refpath, 'winbash')
+        samfile = windowsToBash(samfile, 'winbash')
 
     # Make sure spaces in files are escaped for bash
     if ' ' in fasta:
@@ -122,7 +298,7 @@ def bowtie2(fasta, refpath, samfile, flags, err_file='bowtie2.stderr',
     err_handle.close()
 
 
-def samtools(function, infile, outfile=None, flags=[], err_file='samtools.stderr',
+def samtools(function, infile, outfile=None, flags=(), err_file='samtools.stderr',
              version=None,
              bash_sub=False, bash_dir='/'):
     """
@@ -158,10 +334,10 @@ def samtools(function, infile, outfile=None, flags=[], err_file='samtools.stderr
 
     # Change file formats for winbash option
     if bash_sub == 'winbash':
-        infile = pna_tools.windowsToBash(infile, 'winbash')
+        infile = windowsToBash(infile, 'winbash')
 
         if outfile:
-            outfile = pna_tools.windowsToBash(outfile, 'winbash')
+            outfile = windowsToBash(outfile, 'winbash')
 
     # Make sure spaces in files are escaped for bash
     if ' ' in infile:
@@ -193,7 +369,7 @@ def samtools(function, infile, outfile=None, flags=[], err_file='samtools.stderr
     err_handle.close()
 
 
-def bedtools(function, infiles, outfile=None, flags=[], err_file='bedtools.stderr',
+def bedtools(function, infiles, outfile=None, flags=(), err_file='bedtools.stderr',
              version=None,
              bash_sub=False, bash_dir='/'):
     """
@@ -203,14 +379,14 @@ def bedtools(function, infiles, outfile=None, flags=[], err_file='bedtools.stder
                           flags = standard flags are ['-l', '#', '-r', '0', '-sw', '-sm', '-bed']: '-l' and '-r' and the
                                   numbers following them specify the left and right side extension of the window from
                                   either edge of the feature. '-l' corresponds to the start site and '-r' corresponds
-                                  to the end of the feature when '-sw' is specified, which tells bedtools window to define
-                                  left and right based on strand. '-sm' specifies that overlaps will only be reported
-                                  when on the same strand. '-bed' specifies bedfile output.
+                                  to the end of the feature when '-sw' is specified, which tells bedtools window to
+                                  define left and right based on strand. '-sm' specifies that overlaps will only be
+                                  reported when on the same strand. '-bed' specifies bedfile output.
         getfasta arguments: infiles = [genome fasta, bedfile with genome coordinates]
                             outfile = output fasta file
-                            flags = standard flags are ['-name', '-s']: '-name' specifies that the output fasta identifier
-                                    will be pulled from the name column (column 3) of the bedfile, '-s' specifies that
-                                    strandedness will be respected in extracting fasta sequences.
+                            flags = standard flags are ['-name', '-s']: '-name' specifies that the output fasta
+                                    identifier will be pulled from the name column (column 3) of the bedfile, '-s'
+                                    specifies that strandedness will be respected in extracting fasta sequences.
     :param function: str of function name
     :param infiles: list of str for file paths to input files
     :param outfile: str file path to output file if needed
@@ -240,10 +416,10 @@ def bedtools(function, infiles, outfile=None, flags=[], err_file='bedtools.stder
     if function not in ['window', 'getfasta']:
         raise Exception('Function %s not currently supported by python bedtools wrapper' % function)
 
-    # Change file formats for winbash option
-    if bash_sub == 'winbash':
+    # Change file formats for shell option
+    if bash_sub:
         for n, infile in enumerate(infiles):
-            infiles[n] = pna_tools.windowsToBash(infile, 'winbash')
+            infiles[n] = windowsToBash(infile, bash_sub)
 
     # Make sure spaces in files are escaped for bash
     for n, infile in enumerate(infiles):
@@ -296,6 +472,9 @@ def bedtools(function, infiles, outfile=None, flags=[], err_file='bedtools.stder
 
         # Initialize output file
         if outfile:
+            if bash_sub:
+                outfile = windowsToBash(outfile, bash_sub)
+
             outfile = '"' + outfile + '"'
             bedtools_args += ['-fo', outfile]
         else:

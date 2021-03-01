@@ -2,64 +2,10 @@ import gffutils
 from Bio import SeqIO
 from collections import defaultdict
 import warnings
+import subprocess
 
 
-def bashToWindows(path):
-    """
-    Provides workaround for Windows bash shell path handling, allowing Python subprocess.call functions to work on
-    bash shells in Windows
-    :param path: Cygwin or Windows bash path (e.g. str starting with '/cygdrive/c/...' or '/mnt/c/...'
-    :return: Windows path (e.g. str starting with 'C:/...')
-    """
-
-    if type(path) is str:
-        path_list = path.split('/')
-        if path_list[1] == 'cygdrive':
-            winpath = path_list[2].upper() + ':/' + '/'.join(path_list[3:])
-            return winpath
-        elif path_list[1] == 'mnt':
-            winpath = path_list[2].upper() + ':/' + '/'.join(path_list[3:])
-            return winpath
-        else:
-            raise ValueError('bashToWindows takes Windows bash shell file path, e.g. /cygdrive/c/... or /mnt/c/...')
-    else:
-        raise TypeError('bashToWindows takes string path input')
-
-
-def windowsToBash(path, shell_type):
-    """
-    Provides workaround for Windows bash shell path handling, allowing Python subprocess.call functions to work on
-    bash shells in Windows
-    :param path: Windows file path
-    :param shell_type: 'cygwin' or 'winbash'
-    :return:
-    """
-
-    if type(path) is str:
-        if '/' in path:
-            path_list = path.split('/')
-        elif '\\' in path:
-            path_list = path.split('\\')
-        else:
-            raise ValueError('windowsToBash takes Windows file path, e.g. C:/...')
-
-        if shell_type == 'cygwin':
-            try:
-                bashpath = '/cygdrive/' + path_list[0][0].lower() + '/' + '/'.join(path_list[1:])
-                return bashpath
-            except IndexError:
-                raise ValueError('windowsToBash takes Windows file path, e.g. C:/...')
-        elif shell_type == 'winbash':
-            try:
-                bashpath = '/mnt/' + path_list[0][0].lower() + '/' + '/'.join(path_list[1:])
-                return bashpath
-            except IndexError:
-                raise ValueError('windowsToBash takes Windows file path, e.g. C:/...')
-        else:
-            raise ValueError('windowsToBash takes Windows file path, e.g. C:/...')
-    else:
-        raise TypeError('windowsToBash takes string path input')
-
+# Dictionary handling
 
 def fastaToDict(infasta):
     """
@@ -68,29 +14,42 @@ def fastaToDict(infasta):
     :return: fastaDict: a dictionary of FASTA records
     """
 
-    fastaDict = defaultdict(list)
+    fasta_dict = defaultdict(list)
 
     for seq_record in SeqIO.parse(infasta, 'fasta'):
-        fastaDict[seq_record.id] = str(seq_record.seq)
+        fasta_dict[seq_record.id] = str(seq_record.seq)
 
-    return fastaDict
+    return fasta_dict
 
 
-def dictToFasta(inDict, filename):
+def dictToFasta(fasta_dict, filename, line_length=80):
     """
     Takes a Python dictionary of IDs as keys and sequences as values and outputs a FASTA file
-    :param inDict: Dictionary of FASTA IDs as keys, FASTA sequences as values
+    :param fasta_dict: Dictionary of FASTA IDs as keys, FASTA sequences as values
     :param filename: Name of FASTA file that will be written with this dictionary
+    :param line_length:
     :return:
     """
 
-    if type(inDict) is dict and type(filename) is str:
-        outfasta = open(filename, "w")
-        for key in list(inDict.keys()):
-            outfasta.write('>%s\n%s\n' % (key, inDict[key]))
+    if type(fasta_dict) is dict and type(filename) is str:
+        out_fasta = open(filename, "w")
+        for key in list(fasta_dict.keys()):
+            if line_length:
+                line_start = 0
+                line_end = line_length
+                total_lines = (len(fasta_dict[key]) // line_length) + 1
+                out_fasta.write('>%s\n' % key)
+                for ii in range(total_lines):
+                    out_fasta.write('%s\n' % fasta_dict[key][line_start:line_end])
+                    line_start = line_end
+                    line_end += line_length
+            else:
+                out_fasta.write('>%s\n%s\n' % (key, fasta_dict[key]))
     else:
         raise TypeError('dictToFasta accepts a dict input (arg 1) and str input file path (arg 2)')
 
+
+# Match ID to GFF/GTF file
 
 def isAttribute(gene_id, feature, parent=None, child=None, hierarchy=None):
     """
@@ -108,12 +67,12 @@ def isAttribute(gene_id, feature, parent=None, child=None, hierarchy=None):
 
     # Initialize dictionaries for attributes
     att_dict = defaultdict()
-    att_dict['feature'] = {'gene': None, 'protein_id': None, 'Dbxref': None,    # GFF attributes
-                           'gene_id': None, 'gene_name': None, 'transcript_id': None, 'tss_id': None}   # GTF attributes
+    att_dict['feature'] = {'gene': None, 'protein_id': None, 'Dbxref': None,  # GFF attributes
+                           'gene_id': None, 'gene_name': None, 'transcript_id': None, 'tss_id': None}  # GTF attributes
     att_dict['parent'] = {'gene': None, 'Name': None, 'gene_synonym': None, 'locus_tag': None, 'Dbxref': None,
                           'gene_id': None, 'gene_name': None, 'transcript_id': None, 'tss_id': None}
 
-    if not hierarchy:   # Set default hierarchy
+    if not hierarchy:  # Set default hierarchy
         hierarchy = ['feature.gene', 'parent.gene', 'parent.Name', 'parent.gene_synonym', 'feature.protein_id',
                      'parent.locus_tag', 'feature.Dbxref', 'parent.Dbxref',
                      'feature.gene_id', 'feature.gene_name', 'feature.transcript_id', 'feature.tss_id',
@@ -126,7 +85,7 @@ def isAttribute(gene_id, feature, parent=None, child=None, hierarchy=None):
         feature = child
     elif child and parent:
         raise ValueError('isAttribute does not take both parent and child for single feature record')
-    else:   # Handle case where feature type cannot be inferred from parent/child features
+    else:  # Handle case where feature type cannot be inferred from parent/child features
         att_dict['feature'] = {'gene': None, 'protein_id': None, 'Dbxref': None, 'Name': None, 'gene_synonym': None,
                                'locus_tag': None,
                                'gene_id': None, 'gene_name': None, 'transcript_id': None, 'tss_id': None}
@@ -159,7 +118,7 @@ def isAttribute(gene_id, feature, parent=None, child=None, hierarchy=None):
     return False, None
 
 
-def findID(gff_db, in_list, out_bed, feature_types=None):
+def findID(gff_db, in_list, out_bed, feature_types=('CDS',), id_type='id'):
     """
     Takes a path to a GFF3 file database (already created through gffutils.createdb function) and a file path for an ID
     list formatted as a single column list) of gene/protein identifiers, and outputs a .bed file of those records
@@ -168,13 +127,12 @@ def findID(gff_db, in_list, out_bed, feature_types=None):
     :param out_bed: The path and name of the output BED file
     :param feature_types: The types of features that should be examined. If left as None, the function searches all
     features
+    :param id_type:
     :return:
     """
 
-    if feature_types is None:
-        feature_types = ['CDS']
-
     db = gffutils.FeatureDB(gff_db)
+
     with open(in_list) as fhandle:
         id_list = [line.rstrip() for line in fhandle]
 
@@ -187,38 +145,58 @@ def findID(gff_db, in_list, out_bed, feature_types=None):
 
     for gene_id in id_list:
         for feature in db_list:
-
-            parent = None
-            try:
-                parent = list(db.parents(feature['ID'][0]))[0]
-            except KeyError:
+            condition = False
+            name = None
+            if id_type == 'id':
+                parent = None
                 try:
-                    parent = list(db.parents(feature['gene_id'][0]))[0]
-                except:
+                    parent = list(db.parents(feature['ID'][0]))[0]
+                except KeyError:
+                    try:
+                        parent = list(db.parents(feature['gene_id'][0]))[0]
+                    except IndexError:
+                        pass
+                except IndexError:
                     pass
-            except:
-                pass
 
-            child = None
-            try:
-                child = list(db.children(feature['ID'][0]))[0]
-            except KeyError:
+                child = None
                 try:
-                    child = list(db.children(feature['gene_id'][0]))[0]
-                except:
+                    child = list(db.children(feature['ID'][0]))[0]
+                except KeyError:
+                    try:
+                        child = list(db.children(feature['gene_id'][0]))[0]
+                    except IndexError:
+                        pass
+                except IndexError:
                     pass
-            except:
-                pass
 
-            condition, name = isAttribute(gene_id, feature, parent=parent, child=child)
+                condition, name = isAttribute(gene_id, feature, parent=parent, child=child)
+
+            elif id_type == 'position':
+                try:
+                    if feature.start == int(gene_id) or feature.end == int(gene_id):
+                        condition = True
+                        try:
+                            name = feature['gene'][0]
+                        except KeyError:
+                            try:
+                                name = feature['gene_id'][0]
+                            except KeyError:
+                                name = feature.id
+                except ValueError:
+                    raise ValueError('If id_type is "position" list entries must be integers')
+            else:
+                raise ValueError('id_type must be either "id" or "position"')
+
             if condition:
                 print('%s matches record for %s' % (gene_id, name))
                 chrom = feature.seqid
                 start = feature.start
                 end = feature.end
+                score = feature.score
                 strand = feature.strand
 
-                outfile.write('%s\t%s\t%s\t%s\t%s\n' % (chrom, start, end, name, strand))
+                outfile.write('%s\t%s\t%s\t%s\t%s\t%s\n' % (chrom, start, end, name, score, strand))
                 db_list.remove(feature)
                 break
             else:
@@ -229,6 +207,8 @@ def findID(gff_db, in_list, out_bed, feature_types=None):
 
     outfile.close()
 
+
+# BEDTools file helpers
 
 def editBed(in_bed, out_bed, window=(-5, -5), sequence_length=12):
     """
@@ -249,9 +229,10 @@ def editBed(in_bed, out_bed, window=(-5, -5), sequence_length=12):
 
     for record in bed_list:
         rec_num = 0
-        refID = record[0]
+        ref_id = record[0]
         name = record[3]
-        strand = record[4]
+        score = record[4]
+        strand = record[5]
 
         if strand == '+':
             feat_start = int(record[1])
@@ -260,9 +241,9 @@ def editBed(in_bed, out_bed, window=(-5, -5), sequence_length=12):
             for jj in slide_set:
                 start = feat_start + jj
                 end = start + sequence_length
-                id = name + '_%s' % str(rec_num)
+                feat_id = name + '_%s' % str(rec_num)
 
-                outfile.write('%s\t%s\t%s\t%s\t%s\n' % (refID, str(start), str(end), id, strand))
+                outfile.write('%s\t%s\t%s\t%s\t%s\t%s\n' % (ref_id, str(start), str(end), feat_id, score, strand))
                 rec_num += 1
 
         elif strand == '-':
@@ -272,21 +253,21 @@ def editBed(in_bed, out_bed, window=(-5, -5), sequence_length=12):
             for jj in slide_set:
                 start = feat_start + -1 * jj
                 end = start - sequence_length
-                id = name + '_%s' % str(rec_num)
+                feat_id = name + '_%s' % str(rec_num)
 
-                outfile.write('%s\t%s\t%s\t%s\t%s\n' % (refID, str(end), str(start), id, strand))
+                outfile.write('%s\t%s\t%s\t%s\t%s\t%s\n' % (ref_id, str(end), str(start), feat_id, score, strand))
                 rec_num += 1
 
     outfile.close()
 
 
-# FIND OFF TARGETS TOOLS
-
-def process_bedwindow(infile, outfile,
-                      dist_filter=20,
-                      OT_count_file=None,
-                      self_OT=False,
-                      feature_types=None):
+def processBedWindow(infile, outfile,
+                     dist_filter=20,
+                     ot_count_file=None,
+                     check_homology=False,
+                     homology_outfile=None,
+                     feature_types=None,
+                     log_mismatch=False):
     """
     Processes the output from a BEDTools window function to determine which feature-overlapping alignments are likely
     to cause antisense gene expression/mRNA translation inhibition.
@@ -294,10 +275,10 @@ def process_bedwindow(infile, outfile,
     :param outfile: Output .out file that will display filtered and processed results
     :param dist_filter: The distance downstream from the given feature start where expression/translation inhibition is
     still expected when an antisense molecule binds
-    :param OT_count_file: Off-target count file that tabulates the number of inhibitory off-targets for each antisense
+    :param ot_count_file: Off-target count file that tabulates the number of inhibitory off-targets for each antisense
     sequence
-    :param self_OT: True/False depending on whether the off-target genome is that which the antisense sequence
-    originates from
+    :param check_homology:
+    :param homology_outfile:
     :param feature_types: The type of feature for which the user wants to find off-targets
     :return:
     """
@@ -305,7 +286,7 @@ def process_bedwindow(infile, outfile,
     out = open(outfile, "w")
     out.write('PNA ID\tChromosome ID\tAlignment Strand\tAlignment Start\tFeature Start\tAlignment to STC\tFeature '
               'Info\n')
-    OT_count = defaultdict(list)
+    ot_count = {}
 
     feature_check = True
     if feature_types is None:
@@ -313,6 +294,19 @@ def process_bedwindow(infile, outfile,
     elif feature_types == ['']:
         feature_check = False
 
+    count_duplicates = {}
+    potential_homology = []
+
+    ot_handle = None
+    h_handle = None
+    line_number = 2
+
+    if dist_filter == '':
+        distance_pass = True
+    else:
+        distance_pass = False
+
+    log_mismatch = False  #TODO
     with open(infile) as fhandle:
         for line in fhandle:
             record = line.split('\t')
@@ -326,7 +320,7 @@ def process_bedwindow(infile, outfile,
             else:
                 pass
 
-            seq_name = record[3]
+            pna_name = record[3]
             ref_id = record[0]
             strand = record[5]
             feat_info = record[14].split('\n')[0]
@@ -334,40 +328,271 @@ def process_bedwindow(infile, outfile,
             if strand == '+':
                 align_start = record[1]
                 feat_start = record[9]
-                STC_dist = int(align_start) - int(feat_start) + 1
+                distance = int(align_start) - int(feat_start) + 1
             elif strand == '-':
                 align_start = record[2]
                 feat_start = record[10]
-                STC_dist = int(feat_start) - int(align_start)
+                distance = int(feat_start) - int(align_start)
             else:
                 raise IndexError('Error reading genome strand id')
 
-            outline = [seq_name, ref_id, strand, align_start, feat_start, str(STC_dist), feat_info]
+            if distance_pass or distance < dist_filter:
+                out_line = [pna_name, ref_id, strand, align_start, feat_start, str(distance), feat_info]
 
-            if STC_dist < dist_filter:
                 # keep count of number of off-targets for each PNA
-                if seq_name not in list(OT_count.keys()):
-                    if self_OT:
-                        OT_count[seq_name] = 0
-                    elif not self_OT:
-                        OT_count[seq_name] = 1
-                    else:
-                        warnings.warn('self_OT must be True or False, defaulting to False...')
-                        self_OT = False
-                else:
-                    OT_count[seq_name] += 1
+                if pna_name not in list(ot_count.keys()):
+                    ot_count[pna_name] = 1
+                    count_duplicates[pna_name] = {}
+                    count_duplicates[pna_name][ref_id] = [feat_start]
+                elif ref_id not in list(count_duplicates[pna_name].keys()):
+                    count_duplicates[pna_name][ref_id] = []
+
+                if feat_start not in count_duplicates[pna_name][ref_id]:
+                    ot_count[pna_name] += 1
+                    count_duplicates[pna_name][ref_id] += [feat_start]
+
+                if check_homology:  # TODO: Improve this
+                    if pna_name.split('_')[0].upper() in feat_info.upper():
+                        potential_homology += [[pna_name, line_number, feat_info]]
 
                 # write outfile
-                for item in outline:
+                for item in out_line:
                     out.write('%s\t' % str(item))
                 out.write('\n')
 
-    if OT_count_file:
-        ot_handle = open(OT_count_file, 'w')
-        for key in list(OT_count.keys()):
-            ot_handle.write('%s\t%s\n' % (key, OT_count[key]))
+                line_number += 1
+
+    if ot_count_file:
+        ot_handle = open(ot_count_file, 'w')
+        for key in list(ot_count.keys()):
+            ot_handle.write('%s\t%s\n' % (key, ot_count[key]))
     else:
-        for key in list(OT_count.keys()):
-            print(('%s\t%s' % (key, OT_count[key])))
+        for key in list(ot_count.keys()):
+            print(('%s\t%s' % (key, ot_count[key])))
+
+    if check_homology and homology_outfile:
+        h_handle = open(homology_outfile, 'w')
+        h_handle.write('PNA ID\tOutfile Line Number\tFeature Info\n')
+        for item in potential_homology:
+            h_handle.write('%s\t%s\t%s\n' % (item[0], item[1], item[2]))
+    elif check_homology and not homology_outfile:
+        print('Potential alignments to homologous features:')
+        for item in potential_homology:
+            print('%s\t%s\n' % (item[0], item[2]))
 
     out.close()
+
+    try:
+        ot_handle.close()
+    except AttributeError:
+        pass
+
+    try:
+        h_handle.close()
+    except AttributeError:
+        pass
+
+    return
+
+
+# Miscellaneous functions
+
+def revComp(sequence):
+    """
+
+    :param sequence:
+    :return:
+    """
+
+    try:
+        sequence = sequence.upper()
+    except AttributeError:
+        raise TypeError('rev_comp takes a nucleobase sequence string')
+
+    rc_sequence = ''
+
+    if 'T' in sequence and 'U' in sequence:
+        raise ValueError('Mixed RNA and DNA sequences')
+    elif 'U' in sequence:
+        seq_type = 'RNA'
+    else:
+        seq_type = 'DNA'
+
+    for letter in sequence[::-1]:
+        if letter == 'A':
+            if seq_type == 'DNA':
+                rc_sequence += 'T'
+            elif seq_type == 'RNA':
+                rc_sequence += 'U'
+        elif letter == 'T' or letter == 'U':
+            rc_sequence += 'A'
+        elif letter == 'C':
+            rc_sequence += 'G'
+        elif letter == 'G':
+            rc_sequence += 'C'
+        else:
+            raise ValueError('Non-RNA or non-DNA base included')
+
+    return rc_sequence
+
+
+def rnafold(fasta, outfile=None, coordinates=None):
+    """
+    Returns either an tab-delimited output file or a dictionary of sequence names keyed to lists of the following
+    values: [0] mRNA sequence, [1] folding plot, [2] free energy of folding, [3] (optional) secondary structure fraction
+    of sub-sequence (as designated by coordinate list input)
+    :param fasta: mRNA sequence file
+    :param outfile: (optional) path to output file
+    :param coordinates: (optional) coordinates of sub-sequence for which fractional folding will be returned
+    :return:
+    """
+
+    fold_output = subprocess.check_output(['RNAfold', fasta]).decode('utf-8')
+    out_dict = {}
+    out_list = fold_output.split('\r\n')
+
+    for ii in range(len(out_list)):
+        if out_list[ii][0] == '>':
+            name = out_list[ii][1:]
+            sequence = out_list[ii + 1]
+            fold_plot = out_list[ii + 2].split(' ')[0]
+            energy = float(out_list[ii + 2].split(' ')[1][1:-1])
+
+            out_dict[name] = [sequence, fold_plot, energy]
+            if coordinates:
+                try:
+                    target_fold = fold_plot[coordinates[0]:coordinates[1]]
+                    fraction = (target_fold.count('(') + target_fold.count(')')) / len(target_fold)
+                    out_dict[name] += [fraction]
+                except TypeError or IndexError:
+                    Warning('Input variable "coordinates" must be a list of two integers')
+
+    if outfile:
+        with open(outfile, 'w') as out_handle:
+            out_handle.write('Name\tSequence\tFold Plot\tEnergy')
+            if coordinates:
+                out_handle.write('\tTarget Fold Fraction')
+            out_handle.write('\n')
+
+            for name in out_dict.keys():
+                out_handle.write('%s' % name)
+                for element in out_dict[name]:
+                    out_handle.write('\t%s' % element)
+                out_handle.write('\n')
+    else:
+        return out_dict
+
+
+def truncateFasta(fasta, gff_db, out_fasta, out_gff, out_info=None,
+                  feature_types=('CDS',),
+                  window=(-50, 50)):
+    """
+    Shortens FASTA file to relevant window of bases for PNA/ASO off-target searching
+    :param fasta:
+    :param gff_db:
+    :param out_fasta:
+    :param out_gff:
+    :param out_info:
+    :param feature_types:
+    :param window:
+    :return:
+    """
+
+    fasta_dict = fastaToDict(fasta)
+    truncate_dict = {}
+
+    db = gffutils.FeatureDB(gff_db)
+
+    out_gff = open(out_gff, "w")
+    out_info = open(out_info, "w")
+
+    if out_info:
+        info = (fasta, ', '.join(feature_types), str(window))
+        info_text = 'Truncation settings: %s\nFeature Types: %s\nStart Range: %s' % info
+        out_info.write(info_text)
+        out_info.close()
+
+    if feature_types == ['']:
+        db_list = list(db.all_features())
+    else:
+        db_list = list(db.all_features(featuretype=feature_types))
+
+    prev_feat_info = None
+    for feature in db_list:
+        feat_info = (feature.seqid, feature.start, feature.end, feature.strand)
+        if feat_info == prev_feat_info:
+            print('%s is a duplicate feature, skipping...' % feature.id)
+            continue
+
+        if feature.strand == '+':
+            start = feature.start + window[0]
+            end = feature.start + window[1]
+            feature_start = -1 * window[0]
+            feature_end = window[1] - window[0]
+            if feature_start < 0:
+                feature_start = 1
+        elif feature.strand == '-':
+            start = feature.end + window[0]
+            end = feature.end + window[1]
+            feature_start = 1
+            feature_end = -1 * window[0]
+            if feature_start < 0:
+                feature_start = 0
+        else:
+            warnings.warn('Skipping feature %s, no strand designation' % feature.id)
+            continue
+
+        truncate_dict[feature.seqid + '_%s' % feature.id] = fasta_dict[feature.seqid][start:end]
+
+        feature_list = str(feature).split('\t')
+        feature_list[0] = feature.seqid + '_%s' % feature.id
+
+        feature_list[3] = str(feature_start)
+        feature_list[4] = str(feature_end)
+
+        out_gff.write('\t'.join(feature_list) + '\n')
+
+        prev_feat_info = feat_info
+
+    out_gff.close()
+    dictToFasta(truncate_dict, out_fasta)
+    return
+
+
+def checkHomology(outfile, homology_outfile=None):
+    """
+    Function to check homology outside of the processBedWindow function
+    :return:
+    """
+
+    potential_homology = []
+    line_number = 2
+    h_handle = None
+
+    with open(outfile) as fhandle:
+        for line in fhandle:
+            record = line.split('\t')
+            pna_name = record[0]
+            gene_target = pna_name.split('_')[0]
+            feat_info = record[6]
+
+            if gene_target.upper() in feat_info.upper():
+                potential_homology += [[pna_name, line_number, feat_info]]
+
+            line_number += 1
+
+    if homology_outfile:
+        h_handle = open(homology_outfile, 'w')
+        for item in potential_homology:
+            h_handle.write('%s\t%s\t%s\n' % (item[0], item[1], item[2]))
+    else:
+        print('Potential alignments to homologous features:')
+        for item in potential_homology:
+            print('%s\t%s\t%s\n' % (item[0], item[1], item[2]))
+
+    try:
+        h_handle.close()
+    except AttributeError:
+        pass
+
+    return
