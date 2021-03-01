@@ -88,7 +88,7 @@ class start_app:
         # OK and QUIT buttons
         Button(
             self.master,
-            text="OK", command=self.write_start_info
+            text="OK", command=self.writeStartInfo
         ).grid(row=10, column=0, sticky=W, padx=5, pady=10)
 
         Button(
@@ -143,7 +143,7 @@ class start_app:
 
         return
 
-    def write_start_info(self):
+    def writeStartInfo(self):
         """
         Function writes user-selected start folders to start_info.txt file
         :return:
