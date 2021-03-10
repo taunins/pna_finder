@@ -14,7 +14,7 @@ def fastaToDict(infasta):
     :return: fastaDict: a dictionary of FASTA records
     """
 
-    fasta_dict = defaultdict(list)
+    fasta_dict = defaultdict()
 
     for seq_record in SeqIO.parse(infasta, 'fasta'):
         fasta_dict[seq_record.id] = str(seq_record.seq)
@@ -66,17 +66,17 @@ def isAttribute(gene_id, feature, parent=None, child=None, hierarchy=None):
     """
 
     # Initialize dictionaries for attributes
-    att_dict = defaultdict()
-    att_dict['feature'] = {'gene': None, 'protein_id': None, 'Dbxref': None,  # GFF attributes
-                           'gene_id': None, 'gene_name': None, 'transcript_id': None, 'tss_id': None}  # GTF attributes
-    att_dict['parent'] = {'gene': None, 'Name': None, 'gene_synonym': None, 'locus_tag': None, 'Dbxref': None,
-                          'gene_id': None, 'gene_name': None, 'transcript_id': None, 'tss_id': None}
+    attribute_dict = {'feature': {'gene': None, 'protein_id': None, 'Dbxref': None,  # GFF attributes
+                                  'gene_id': None, 'gene_name': None, 'transcript_id': None, 'tss_id': None},
+                      # GTF attributes
+                      'parent': {'gene': None, 'Name': None, 'gene_synonym': None, 'locus_tag': None, 'Dbxref': None,
+                                 'gene_id': None, 'gene_name': None, 'transcript_id': None, 'tss_id': None}}
 
     if not hierarchy:  # Set default hierarchy
         hierarchy = ['feature.gene', 'parent.gene', 'parent.Name', 'parent.gene_synonym', 'feature.protein_id',
                      'parent.locus_tag', 'feature.Dbxref', 'parent.Dbxref',
-                     'feature.gene_id', 'feature.gene_name', 'feature.transcript_id', 'feature.tss_id',
-                     'parent.gene_id', 'parent.gene_name', 'parent.transcript_id', 'parent.tss_id']
+                     'feature.gene_id', 'feature.gene_name', 'parent.gene_id', 'parent.gene_name',
+                     'feature.transcript_id', 'feature.tss_id', 'parent.transcript_id', 'parent.tss_id']
 
     if parent and not child:
         pass
@@ -84,41 +84,49 @@ def isAttribute(gene_id, feature, parent=None, child=None, hierarchy=None):
         parent = feature
         feature = child
     elif child and parent:
-        raise ValueError('isAttribute does not take both parent and child for single feature record')
+        warnings.warn('isAttribute does not take both parent and child for single feature, using parent as default')
+        pass
     else:  # Handle case where feature type cannot be inferred from parent/child features
-        att_dict['feature'] = {'gene': None, 'protein_id': None, 'Dbxref': None, 'Name': None, 'gene_synonym': None,
-                               'locus_tag': None,
-                               'gene_id': None, 'gene_name': None, 'transcript_id': None, 'tss_id': None}
-        att_dict['parent'] = {}
+        attribute_dict['feature'] = {'gene': None, 'protein_id': None, 'Dbxref': None, 'Name': None,
+                                     'gene_synonym': None, 'locus_tag': None,
+                                     'gene_id': None, 'gene_name': None, 'transcript_id': None, 'tss_id': None}
 
     # Iterate through feature and parent gene records to search for all identifiers
-    for key in list(att_dict['feature'].keys()):
+    for key in list(attribute_dict['feature'].keys()):
         try:
-            att_dict['feature'][key] = feature[key]
+            attribute_dict['feature'][key] = feature[key]
         except KeyError:
-            hierarchy.remove('feature.%s' % key)
+            try:
+                hierarchy.remove('feature.%s' % key)
+            except ValueError:
+                pass
 
     if parent:
-        for key in list(att_dict['parent'].keys()):
+        for key in list(attribute_dict['parent'].keys()):
             try:
-                att_dict['parent'][key] = parent[key]
+                attribute_dict['parent'][key] = parent[key]
             except KeyError:
                 hierarchy.remove('parent.%s' % key)
 
     # Qualifiers that have been found are iterated through to look for matches
     for entry in hierarchy:
         try:
-            for identifier in att_dict[entry.split('.')[0]][entry.split('.')[1]]:
-                if gene_id in identifier:
-                    name = att_dict[hierarchy[0].split('.')[0]][hierarchy[0].split('.')[1]][0]
-                    return True, name
+            [key_1, key_2] = entry.split('.')
+            if key_2 == 'Dbxref' and attribute_dict[key_1][key_2]:
+                identifier = [db_id.split(':')[1] for db_id in attribute_dict[key_1][key_2]]
+            else:
+                identifier = attribute_dict[key_1][key_2]
+
+            if gene_id in identifier:
+                name = attribute_dict[hierarchy[0].split('.')[0]][hierarchy[0].split('.')[1]][0]
+                return True, name
         except TypeError:
             pass
 
     return False, None
 
 
-def findID(gff_db, in_list, out_bed, feature_types=('CDS',), id_type='id'):
+def findID(gff_db, in_list, out_bed, feature_types=('CDS',), id_type='id', full_search=False, error_file=None):
     """
     Takes a path to a GFF3 file database (already created through gffutils.createdb function) and a file path for an ID
     list formatted as a single column list) of gene/protein identifiers, and outputs a .bed file of those records
@@ -128,84 +136,115 @@ def findID(gff_db, in_list, out_bed, feature_types=('CDS',), id_type='id'):
     :param feature_types: The types of features that should be examined. If left as None, the function searches all
     features
     :param id_type:
+    :param full_search:
     :return:
     """
 
     db = gffutils.FeatureDB(gff_db)
 
-    with open(in_list) as fhandle:
-        id_list = [line.rstrip() for line in fhandle]
+    with open(in_list) as f_handle:
+        id_list = [line.rstrip() for line in f_handle]
 
     outfile = open(out_bed, "w")
+    not_found = []
+    matches = []
 
-    if feature_types == ['']:
-        db_list = list(db.all_features())
-    else:
-        db_list = list(db.all_features(featuretype=feature_types))
-
-    for gene_id in id_list:
-        for feature in db_list:
-            condition = False
-            name = None
-            if id_type == 'id':
-                parent = None
-                try:
-                    parent = list(db.parents(feature['ID'][0]))[0]
-                except KeyError:
-                    try:
-                        parent = list(db.parents(feature['gene_id'][0]))[0]
-                    except IndexError:
-                        pass
-                except IndexError:
-                    pass
-
-                child = None
-                try:
-                    child = list(db.children(feature['ID'][0]))[0]
-                except KeyError:
-                    try:
-                        child = list(db.children(feature['gene_id'][0]))[0]
-                    except IndexError:
-                        pass
-                except IndexError:
-                    pass
-
-                condition, name = isAttribute(gene_id, feature, parent=parent, child=child)
-
-            elif id_type == 'position':
-                try:
-                    if feature.start == int(gene_id) or feature.end == int(gene_id):
-                        condition = True
-                        try:
-                            name = feature['gene'][0]
-                        except KeyError:
-                            try:
-                                name = feature['gene_id'][0]
-                            except KeyError:
-                                name = feature.id
-                except ValueError:
-                    raise ValueError('If id_type is "position" list entries must be integers')
-            else:
-                raise ValueError('id_type must be either "id" or "position"')
-
-            if condition:
-                print('%s matches record for %s' % (gene_id, name))
-                chrom = feature.seqid
+    if id_type == 'id':
+        for gene_id in id_list:
+            try:
+                feature = db[gene_id]
+                name = feature.id
+                chromosome = feature.seqid
                 start = feature.start
                 end = feature.end
                 score = feature.score
                 strand = feature.strand
+                matches.append([gene_id, name])
 
-                outfile.write('%s\t%s\t%s\t%s\t%s\t%s\n' % (chrom, start, end, name, score, strand))
-                db_list.remove(feature)
-                break
-            else:
-                db_list = db_list[1:] + [db_list[0]]
+                outfile.write('%s\t%s\t%s\t%s\t%s\t%s\n' % (chromosome, start, end, name, score, strand))
+            except gffutils.exceptions.FeatureNotFoundError:
+                not_found.append(gene_id)
+    else:
+        not_found = id_list
 
+    if (full_search and not_found) or id_type == 'position':
+        if feature_types == ('',):
+            features = list(db.all_features())
         else:
-            print('No matching record found for gene ID %s' % gene_id)
+            features = list(db.all_features(featuretype=feature_types))
+
+        for gene_id in not_found:
+            for feature in features:
+                condition = False
+                name = None
+                if id_type == 'id':
+                    parent = None
+                    try:
+                        parent = list(db.parents(feature['ID'][0]))[0]
+                    except KeyError:
+                        try:
+                            parent = list(db.parents(feature['gene_id'][0]))[0]
+                        except IndexError:
+                            pass
+                    except IndexError:
+                        pass
+
+                    child = None
+                    try:
+                        child = list(db.children(feature['ID'][0]))[0]
+                    except KeyError:
+                        try:
+                            child = list(db.children(feature['gene_id'][0]))[0]
+                        except IndexError:
+                            pass
+                    except IndexError:
+                        pass
+
+                    condition, name = isAttribute(gene_id, feature, parent=parent, child=child)
+
+                elif id_type == 'position':
+                    try:
+                        if feature.start == int(gene_id) or feature.end == int(gene_id):
+                            condition = True
+                            try:
+                                name = feature['gene'][0]
+                            except KeyError:
+                                try:
+                                    name = feature['gene_id'][0]
+                                except KeyError:
+                                    name = feature.id
+                    except ValueError:
+                        warnings.warn('If id_type is "position" list entries must be integers, skipping %s' % gene_id)
+                else:
+                    raise ValueError('id_type must be either "id" or "position"')
+
+                if condition:
+                    print('%s matches record for %s' % (gene_id, name))
+                    chromosome = feature.seqid
+                    start = feature.start
+                    end = feature.end
+                    score = feature.score
+                    strand = feature.strand
+
+                    outfile.write('%s\t%s\t%s\t%s\t%s\t%s\n' % (chromosome, start, end, name, score, strand))
+                    not_found.remove(gene_id)
+                    break
+
+    if not_found:
+        print('No matching record found for gene ID(s): %s' % ', '.join(not_found))
+    else:
+        print('All gene IDs successfully matched to features')
 
     outfile.close()
+
+    if error_file:
+        with open(error_file, 'w') as error_handle:
+            error_handle.write('gene_id\tfeature_match_id\n')
+            for pair in matches:
+                error_handle.write('%s\n' % '\t'.join(pair))
+            for gene_id in not_found:
+                error_handle.write('%s\tNone\n' % gene_id)
+        error_handle.close()
 
 
 # BEDTools file helpers
@@ -266,8 +305,7 @@ def processBedWindow(infile, outfile,
                      ot_count_file=None,
                      check_homology=False,
                      homology_outfile=None,
-                     feature_types=None,
-                     log_mismatch=False):
+                     feature_types=None):
     """
     Processes the output from a BEDTools window function to determine which feature-overlapping alignments are likely
     to cause antisense gene expression/mRNA translation inhibition.
@@ -306,7 +344,7 @@ def processBedWindow(infile, outfile,
     else:
         distance_pass = False
 
-    log_mismatch = False  #TODO
+    log_mismatch = False  # TODO
     with open(infile) as fhandle:
         for line in fhandle:
             record = line.split('\t')
@@ -452,20 +490,23 @@ def rnafold(fasta, outfile=None, coordinates=None):
     out_list = fold_output.split('\r\n')
 
     for ii in range(len(out_list)):
-        if out_list[ii][0] == '>':
-            name = out_list[ii][1:]
-            sequence = out_list[ii + 1]
-            fold_plot = out_list[ii + 2].split(' ')[0]
-            energy = float(out_list[ii + 2].split(' ')[1][1:-1])
+        try:
+            if out_list[ii][0] == '>':
+                name = out_list[ii].split(' ')[0][1:]
+                sequence = out_list[ii + 1]
+                fold_plot = out_list[ii + 2].split(' ')[0]
+                energy = float(out_list[ii + 2].split(' ')[1][1:-1])
 
-            out_dict[name] = [sequence, fold_plot, energy]
-            if coordinates:
-                try:
-                    target_fold = fold_plot[coordinates[0]:coordinates[1]]
-                    fraction = (target_fold.count('(') + target_fold.count(')')) / len(target_fold)
-                    out_dict[name] += [fraction]
-                except TypeError or IndexError:
-                    Warning('Input variable "coordinates" must be a list of two integers')
+                out_dict[name] = [sequence, fold_plot, energy]
+                if coordinates:
+                    try:
+                        target_fold = fold_plot[coordinates[0]:coordinates[1]]
+                        fraction = (target_fold.count('(') + target_fold.count(')')) / len(target_fold)
+                        out_dict[name] += [fraction]
+                    except TypeError or IndexError:
+                        Warning('Input variable "coordinates" must be a list of two integers')
+        except IndexError:
+            pass
 
     if outfile:
         with open(outfile, 'w') as out_handle:
