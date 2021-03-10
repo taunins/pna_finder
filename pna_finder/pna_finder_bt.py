@@ -5,7 +5,7 @@ import functools
 import os
 from collections import OrderedDict
 from . import pna_pipeline_bt
-import pna_finder
+import pna_finder_dev
 
 
 class pna_app:
@@ -94,21 +94,21 @@ class pna_app:
 
         if self.function.get() == 0:
             top.title('PNA Finder - Get Sequences')
-            self.function_name = 'get_sequences'
+            self.function_name = 'getSequences'
             self.app_gs()
         elif self.function.get() == 1:
             top.title('PNA Finder - Find Off-Targets')
-            self.function_name = 'find_off_targets'
+            self.function_name = 'findOffTargets'
             self.app_ot()
         elif self.function.get() == 2:
             top.title('PNA Finder - Check Sequence Warnings')
-            self.function_name = 'sequence_warnings'
+            self.function_name = 'sequenceWarnings'
             self.app_warnings()
 
     def app_gs(self):
         """
         Creates a dialog box that may be filled in with the Get Sequences function parameters and file selections
-            get_sequences Inputs:
+            getSequences Inputs:
                 job parameter keys
                     start       -   int
                     end         -   int
@@ -170,8 +170,17 @@ class pna_app:
         self.parameters['feature_type'] = StringVar()
         self.parameters['feature_type'].set('CDS')
 
-        self.pna_length = Entry(self.top, width=10, textvariable=self.parameters['feature_type'])
-        self.pna_length.grid(row=4, column=2, sticky=E, padx=5, pady=5)
+        self.full_search = IntVar()
+        self.full_search.set(0)
+
+        Checkbutton(
+            self.top,
+            text='Full annotation search',
+            variable=self.full_search
+        ).grid(row=4, column=1, sticky=W, padx=5, pady=5)
+
+        self.feature_type = Entry(self.top, width=10, textvariable=self.parameters['feature_type'])
+        self.feature_type.grid(row=4, column=2, sticky=E, padx=5, pady=5)
 
         # ID LIST FILE SELECTION
         self.labels['id_list'] = Label(
@@ -210,7 +219,7 @@ class pna_app:
         # ANNOTATION FILE SELECTION
         Label(
             self.top,
-            text='Select Annotation File Option:', font=("Arial", 11, "italic")
+            text='Select Annotation File Option:', font=("Arial", 10, "italic")
         ).grid(row=9, rowspan=2, sticky=N, pady=(20, 0))
 
         self.gff_option = IntVar()
@@ -313,7 +322,7 @@ class pna_app:
     def app_ot(self):
         """
         Creates a dialog box that may be filled in with the Find Off Targets function parameters and file selections
-            find_off_targets Inputs:
+            findOffTargets Inputs:
                 job parameter keys
                     start       -   int
                     end         -   int
@@ -327,6 +336,7 @@ class pna_app:
                     gff         -   str
                     output      -   str
                 option keys
+                    full_search -   int (optional)
                     count       -   int (optional)
                     homology    -   int (optional)
                     remove_files -  int (optional)
@@ -347,7 +357,7 @@ class pna_app:
 
         self.labels['mismatch'] = Label(  # Prompt for number of mismatches allowed
             self.top,
-            text='Maximum Mismatches:')
+            text='Mismatches:')
         self.labels['mismatch'].grid(row=3, column=0, sticky=W, padx=5, pady=5)
 
         self.labels['feature_type'] = Label(  # Prompt for GFF record type
@@ -399,7 +409,7 @@ class pna_app:
         # GENOME ASSEMBLY FILE SELECTION
         Label(
             self.top,
-            text='Select Index File Option:', font=("Arial", 11, "italic")
+            text='Select Index File Option:', font=("Arial", 10, "italic")
         ).grid(row=7, rowspan=2, sticky=N, pady=(20, 0))
 
         self.index_option = IntVar()
@@ -409,13 +419,13 @@ class pna_app:
             self.top,
             text='Build new index from FASTA file',
             variable=self.index_option, value=0
-        ).grid(row=8, column=1, sticky=W, padx=5, pady=(5, 0))
+        ).grid(row=8, column=1, columnspan=2, sticky=W, padx=5, pady=(10, 0))
 
         Radiobutton(
             self.top,
             text='Select existing index (any of the 6 files)',
             variable=self.index_option, value=1
-        ).grid(row=9, column=1, sticky=W, padx=5, pady=(0, 5))
+        ).grid(row=9, column=1, columnspan=2, sticky=W, padx=5, pady=(0, 5))
 
         self.labels['assembly'] = Label(
             self.top,
@@ -508,7 +518,7 @@ class pna_app:
     def app_warnings(self):
         """
         Creates a dialog box that may be filled in with the Check Warnings file selections
-            sequence_warnings Inputs:
+            sequenceWarnings Inputs:
                 self.files dictionary
                     pna_list    -   str
                     output      -   str
@@ -726,7 +736,7 @@ class pna_app:
         """
         Function checks the inputs for PNA tools to determine whether the necessary inputs are submitted in the
         correct format
-            get_sequences Inputs:
+            getSequences Inputs:
                 self.parameters dictionary:
                     start       -   int
                     end         -   int
@@ -738,10 +748,11 @@ class pna_app:
                     assembly    -   str
                     gff         -   str
                     output      -   str
+                self.full_search -  int (optional)
                 self.STRING     -   int (optional)
                 self.warnings   -   int (optional)
 
-            find_off_targets Inputs:
+            findOffTargets Inputs:
                 self.parameters dictionary:
                     start       -   int
                     end         -   int
@@ -756,7 +767,7 @@ class pna_app:
                 self.homology   -   int (optional)
                 self.remove_files - int (optional)
 
-            sequence_warnings Inputs
+            sequenceWarnings Inputs
                 pna_option  -   int
                 pna_list    -   str
                 temp_option -   int (optional)
@@ -789,6 +800,7 @@ class pna_app:
                                   ('gff', 'Annotation File'),
                                   ('output', 'Output Directory')])
 
+            submit_dict['full_search'] = self.full_search.get()
             submit_dict['gff_option'] = self.gff_option.get()
             submit_dict['STRING'] = self.STRING.get()
             submit_dict['warnings'] = self.warnings.get()
@@ -797,7 +809,7 @@ class pna_app:
         elif self.function.get() == 1:
             p_dict = OrderedDict([('start', 'Off-Target Window Start'),
                                   ('end', 'Off-Target Window End'),
-                                  ('mismatch', 'Maximum Mismatches'),
+                                  ('mismatch', 'Mismatches'),
                                   ('feature_type', 'Annotation Record Types')])
 
             f_dict = OrderedDict([('targets', 'PNA Targets File'),
@@ -827,6 +839,9 @@ class pna_app:
                 elif p_key == 'end' and submit_dict[p_key] < submit_dict['start']:
                     check = False
                     check_warnings[p_key] = 'Window Start must be less than or equal to Window End'
+
+                elif p_key == 'mismatch':
+                    submit_dict[p_key] = [submit_dict[p_key]]
 
             except ValueError:
                 if self.function.get() == 0:
@@ -947,11 +962,11 @@ class pna_app:
             print('Started at %s' % start_time)
 
             if self.function.get() == 0:
-                pna_pipeline_bt.get_sequences(submit_dict)
+                pna_pipeline_bt.getSequences(submit_dict)
             elif self.function.get() == 1:
-                pna_pipeline_bt.find_off_targets(submit_dict)
+                pna_pipeline_bt.findOffTargets(submit_dict)
             elif self.function.get() == 2:
-                pna_pipeline_bt.sequence_warnings(submit_dict)
+                pna_pipeline_bt.sequenceWarnings(submit_dict)
 
             end_time = datetime.datetime.now()
             print('Finished at %s' % end_time)
@@ -973,7 +988,7 @@ def startup():
     warning_text = 'The file "start_info.txt" has been deleted or moved.'
 
     try:
-        start_handle = open('%s/start_info.txt' % pna_finder.__path__[0], 'r')
+        start_handle = open('%s/start_info.txt' % pna_finder_dev.__path__[0], 'r')
         warning_text = 'The file "start_info.txt" is improperly built.'
 
         start_dict = {}
