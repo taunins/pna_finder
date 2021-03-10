@@ -169,12 +169,12 @@ def findID(gff_db, in_list, out_bed, feature_types=('CDS',), id_type='id', full_
 
     if (full_search and not_found) or id_type == 'position':
         if feature_types == ('',):
-            features = list(db.all_features())
+            features = db.all_features()
         else:
-            features = list(db.all_features(featuretype=feature_types))
+            features = db.all_features(featuretype=feature_types)
 
-        for gene_id in not_found:
-            for feature in features:
+        for feature in features:
+            for gene_id in not_found:
                 condition = False
                 name = None
                 if id_type == 'id':
@@ -215,6 +215,7 @@ def findID(gff_db, in_list, out_bed, feature_types=('CDS',), id_type='id', full_
                                     name = feature.id
                     except ValueError:
                         warnings.warn('If id_type is "position" list entries must be integers, skipping %s' % gene_id)
+                        not_found.remove(gene_id)
                 else:
                     raise ValueError('id_type must be either "id" or "position"')
 
