@@ -8,6 +8,20 @@ from . import pna_pipeline_bt
 import pna_finder_dev
 
 
+#   TODO:
+#   Bacteria/virus/mammalian modules
+#       Mammalian: DNase I (ENCODE)
+#       Promoter/TSS prediction
+#   Homology function
+#   Folding analysis in GUI                 X (Check Sequence Warnings)
+#       Folding file cleanup                X
+#   Gene ontology for selection
+#   Splice awareness (HISAT2?)
+#   Pre-loaded files
+#       FASTA, GFF, essential gene lists
+#   'position' findID
+
+
 class pna_app:
     def __init__(self, master, bash_path='/', home_path='/', shell_type='cygwin'):
         """
@@ -114,30 +128,39 @@ class pna_app:
                     end         -   int
                     pna_length  -   int
                     feature_type -  str
+                    string_id   -   int (optional)
                 file keys
-                    gff_option  -   int
                     id_list     -   str
                     assembly    -   str
                     gff         -   str
                     output      -   str
                 option keys
+                    full_search -   int (optional)
+                    gff_option  -   int
                     STRING      -   int (optional)
-                    string_id   -   int (optional)
                     warnings    -   int (optional)
+                    temp_option -   int (optional)
         (see manual.pdf in package root directory for more info)
         :return:
         """
 
         # PNA SEQUENCE PARAMETERS
-        self.labels['start'] = Label(  # Prompt for window start index
+        self.labels['start'] = Label(
             self.top,
-            text='Sequence Window Start:')
-        self.labels['start'].grid(row=1, column=0, sticky=W, padx=5, pady=5)
+            font=('Arial', 8, 'bold'),
+            text='START')
+        self.labels['start'].grid(row=1, column=1, sticky=E)
 
-        self.labels['end'] = Label(  # Prompt for window end index
+        self.labels['end'] = Label(
             self.top,
-            text='Sequence Window End:')
-        self.labels['end'].grid(row=2, column=0, sticky=W, padx=5, pady=5)
+            font=('Arial', 8, 'bold'),
+            text='END')
+        self.labels['end'].grid(row=1, column=2, sticky=E)
+
+        self.labels['window'] = Label(  # Prompt for window start index
+            self.top,
+            text='Sequence Window:')
+        self.labels['window'].grid(row=2, column=0, sticky=W, padx=5, pady=(0, 5))
 
         self.labels['length'] = Label(  # Prompt for PNA length
             self.top,
@@ -153,13 +176,13 @@ class pna_app:
         self.parameters['start'].set('-5')
 
         self.window_start = Entry(self.top, width=5, textvariable=self.parameters['start'])
-        self.window_start.grid(row=1, column=2, sticky=E, padx=5, pady=5)
+        self.window_start.grid(row=2, column=1, sticky=E, padx=5, pady=(0, 5))
 
         self.parameters['end'] = StringVar()
         self.parameters['end'].set('-5')
 
         self.window_end = Entry(self.top, width=5, textvariable=self.parameters['end'])
-        self.window_end.grid(row=2, column=2, sticky=E, padx=5, pady=5)
+        self.window_end.grid(row=2, column=2, sticky=E, padx=5, pady=(0, 5))
 
         self.parameters['length'] = StringVar()
         self.parameters['length'].set('12')
@@ -327,16 +350,14 @@ class pna_app:
                     start       -   int
                     end         -   int
                     mismatch    -   int
-                    length      -   int
                     feature_type -  str
                 file keys
-                    index_option -  int
                     targets     -   str
                     assembly    -   str
                     gff         -   str
                     output      -   str
                 option keys
-                    full_search -   int (optional)
+                    index_option -  int
                     count       -   int (optional)
                     homology    -   int (optional)
                     remove_files -  int (optional)
@@ -345,15 +366,22 @@ class pna_app:
         """
 
         # OFF TARGET SEARCH PARAMETERS
-        self.labels['start'] = Label(  # Prompt for window start index
+        self.labels['start'] = Label(
             self.top,
-            text='Off-Target Window Start:')
-        self.labels['start'].grid(row=1, column=0, sticky=W, padx=5, pady=5)
+            font=('Arial', 8, 'bold'),
+            text='START')
+        self.labels['start'].grid(row=1, column=1, sticky=E, padx=(110, 0))
 
-        self.labels['end'] = Label(  # Prompt for window end index
+        self.labels['end'] = Label(
             self.top,
-            text='Off-Target Window End:')
-        self.labels['end'].grid(row=2, column=0, sticky=W, padx=5, pady=5)
+            font=('Arial', 8, 'bold'),
+            text='END')
+        self.labels['end'].grid(row=1, column=2, sticky=E)
+
+        self.labels['window'] = Label(  # Prompt for window start index
+            self.top,
+            text='Off-Target Window:')
+        self.labels['window'].grid(row=2, column=0, sticky=W, padx=5, pady=(0, 5))
 
         self.labels['mismatch'] = Label(  # Prompt for number of mismatches allowed
             self.top,
@@ -369,13 +397,13 @@ class pna_app:
         self.parameters['start'].set('-20')
 
         self.window_start = Entry(self.top, width=5, textvariable=self.parameters['start'])
-        self.window_start.grid(row=1, column=2, sticky=E, padx=5, pady=5)
+        self.window_start.grid(row=2, column=1, sticky=E, padx=5, pady=(0, 5))
 
         self.parameters['end'] = StringVar()
         self.parameters['end'].set('20')
 
         self.window_end = Entry(self.top, width=5, textvariable=self.parameters['end'])
-        self.window_end.grid(row=2, column=2, sticky=E, padx=5, pady=5)
+        self.window_end.grid(row=2, column=2, sticky=E, padx=5, pady=(0, 5))
 
         self.parameters['mismatch'] = StringVar()
         self.parameters['mismatch'].set('0')
@@ -519,18 +547,22 @@ class pna_app:
         """
         Creates a dialog box that may be filled in with the Check Warnings file selections
             sequenceWarnings Inputs:
-                self.files dictionary
+                file keys
                     pna_list    -   str
+                    rnafold     -   str (optional)
                     output      -   str
+                option keys
+                    pna_option  -   int
+                    temp_option -   int (optional)
+                    rnafold_option - int (optional)
         (see manual.pdf in package root directory for more info)
-        :return:
         :return:
         """
 
-        # PNA FILE SELECTION
+        # PNA LIST FILE SELECTION
         Label(
             self.top,
-            text='Select PNA Upload Filetype:', font=("Arial", 11, "italic")
+            text='Select PNA Upload Filetype:', font=("Arial", 10, "italic")
         ).grid(row=1, rowspan=2, sticky=N, pady=(20, 0))
 
         self.pna_option = IntVar()
@@ -563,21 +595,37 @@ class pna_app:
                                       row=3, column=1))
         pna_button.grid(row=3, column=2, sticky=E, padx=5, pady=5)
 
+        # RNAFOLD FILE SELECTION
+        self.labels['rnafold'] = Label(
+            self.top,
+            font=('Arial', 9, 'bold'),
+            text='Select RNA Sequence File (Optional)'
+        )
+        self.labels['rnafold'].grid(row=4, column=0, sticky=W, padx=5, pady=5)
+
+        rnafold_button = Button(
+            self.top,
+            text="Select",
+            command=functools.partial(self.browse, self.top, 'rnafold',
+                                      title='Select Output Directory',
+                                      row=4, column=1))
+        rnafold_button.grid(row=4, column=2, sticky=E, padx=5, pady=5)
+
         # OUTPUT DIRECTORY SELECTION
         self.labels['output'] = Label(
             self.top,
             font=('Arial', 9, 'bold'),
             text='Select Output Directory'
         )
-        self.labels['output'].grid(row=4, column=0, sticky=W, padx=5, pady=5)
+        self.labels['output'].grid(row=5, column=0, sticky=W, padx=5, pady=5)
 
         output_button = Button(
             self.top,
             text="Select",
             command=functools.partial(self.browse_folder, self.top, 'output',
                                       title='Select Output Directory',
-                                      row=4, column=1))
-        output_button.grid(row=4, column=2, sticky=E, padx=5, pady=5)
+                                      row=5, column=1))
+        output_button.grid(row=5, column=2, sticky=E, padx=5, pady=5)
 
         # MELT TEMPERATURE CALCULATION OPTION
         self.temp_option = IntVar()
@@ -587,19 +635,29 @@ class pna_app:
             self.top,
             text='Calculate single-stranded PNA/DNA melt temperature',
             variable=self.temp_option
-        ).grid(row=5, column=0, columnspan=3, sticky=W, padx=5, pady=5)
+        ).grid(row=6, column=0, columnspan=3, sticky=W, padx=5, pady=5)
+
+        # RNAFOLD ANALYSIS OPTION
+        self.rnafold_option = IntVar()
+        self.rnafold_option.set(0)
+
+        Checkbutton(
+            self.top,
+            text='Calculate target structured fraction',
+            variable=self.rnafold_option
+        ).grid(row=7, column=0, columnspan=3, sticky=W, padx=5, pady=5)
 
         # JOB SUBMISSION
         Button(
             self.top,
             text="SUBMIT", command=self.submit
-        ).grid(row=6, column=0, sticky=W, padx=5, pady=10)
+        ).grid(row=8, column=0, sticky=W, padx=5, pady=10)
 
         # WINDOW QUIT
         Button(
             self.top,
             text="QUIT", fg="red", command=self.quit_app,
-        ).grid(row=6, column=2, sticky=E, padx=5, pady=10)
+        ).grid(row=8, column=2, sticky=E, padx=5, pady=10)
 
     def browse(self, frame, filekey, title='Select file', filetypes=(("all files", "*.*"),),
                row=0, column=0):
@@ -741,7 +799,7 @@ class pna_app:
                     start       -   int
                     end         -   int
                     pna_length  -   int
-                    feature_type -   str
+                    feature_type -  str
                     string_id   -   int (optional)
                 self.files dictionary
                     id_list     -   str
@@ -749,8 +807,10 @@ class pna_app:
                     gff         -   str
                     output      -   str
                 self.full_search -  int (optional)
+                self.gff_option -   int
                 self.STRING     -   int (optional)
                 self.warnings   -   int (optional)
+                self.temp_option -  int (optional)
 
             findOffTargets Inputs:
                 self.parameters dictionary:
@@ -763,14 +823,19 @@ class pna_app:
                     assembly    -   str
                     gff         -   str
                     output      -   str
+                self.index_option - int
                 self.count      -   int (optional)
                 self.homology   -   int (optional)
                 self.remove_files - int (optional)
 
             sequenceWarnings Inputs
-                pna_option  -   int
-                pna_list    -   str
-                temp_option -   int (optional)
+                self.files dictionary
+                    pna_list    -   str
+                    rnafold     -   str (optional)
+                    output      -   str
+                self.pna_option  -   int
+                self.temp_option -   int (optional)
+                self.rnafold_option - int (optional)
         """
 
         check = True
@@ -825,20 +890,26 @@ class pna_app:
         elif self.function.get() == 2:
             p_dict = OrderedDict([])
             f_dict = OrderedDict([('pna_list', 'PNA Sequences File'),
+                                  ('rnafold', 'RNA Sequences File'),
                                   ('output', 'Output Directory')])
 
             submit_dict['pna_option'] = self.pna_option.get()
             submit_dict['temp_option'] = self.temp_option.get()
+            submit_dict['rnafold_option'] = self.rnafold_option.get()
 
         for p_key in p_dict:
-            try:  # Entry data check
+            try:
                 submit_dict[p_key] = int(self.parameters[p_key].get().strip())
                 if self.function.get() == 0 and p_key == 'string_id' and not self.STRING.get():
                     check_messages[p_key] = 'STRING ID entered but STRING analysis option not selected'
 
-                elif p_key == 'end' and submit_dict[p_key] < submit_dict['start']:
-                    check = False
-                    check_warnings[p_key] = 'Window Start must be less than or equal to Window End'
+                elif p_key == 'end':
+                    try:
+                        if submit_dict[p_key] < submit_dict['start']:
+                            check = False
+                            check_warnings[p_key] = 'Window Start must be less than or equal to Window End'
+                    except KeyError:
+                        pass
 
                 elif p_key == 'mismatch':
                     submit_dict[p_key] = [submit_dict[p_key]]
@@ -881,14 +952,16 @@ class pna_app:
 
                     elif self.function.get() == 0 and f_key == 'gff' and \
                             ((self.gff_option.get() and self.files[f_key].rsplit('.', 1)[1] != 'db') or
-                             (not self.gff_option.get() and self.files[f_key].rsplit('.', 1)[1] != 'gff')):
+                             (not self.gff_option.get() and self.files[f_key].rsplit('.', 1)[1].lower() not in ('gff',
+                                                                                                                'gff3',
+                                                                                                                'gtf'))):
                         check = False
                         check_warnings[f_key] = 'Wrong filetype selected for Annotation File Option'
 
                     elif self.function.get() and f_key == 'assembly' and \
                             ((self.index_option.get() and self.files[f_key].rsplit('.', 1)[1] != 'ebwt' or
-                              (not self.index_option.get() and self.files[f_key].rsplit('.', 1)[1] not in ['fa', 'fna',
-                                                                                                           'fasta']))):
+                              (not self.index_option.get() and self.files[f_key].rsplit('.', 1)[1] not in ('fa', 'fna',
+                                                                                                           'fasta')))):
                         check = False
                         check_warnings[f_key] = 'Wrong filetype selected for Index File Option'
 
@@ -900,6 +973,13 @@ class pna_app:
                     check_warnings[f_key] = 'Filepath for %s does not exist' % f_dict[f_key]
 
             except KeyError:
+                if f_key == 'rnafold':
+                    if submit_dict['rnafold_option'] == 1:
+                        check = False
+                        check_warnings[f_key] = 'Structured fraction option is selected, must select RNA Sequence File'
+                        continue
+                    else:
+                        continue
                 check = False
                 check_warnings[f_key] = ('Must select %s' % f_dict[f_key])
 

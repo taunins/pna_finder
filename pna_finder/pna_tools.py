@@ -3,12 +3,15 @@ from Bio import SeqIO
 from collections import defaultdict
 import warnings
 import subprocess
+import os
 
 
 # Dictionary handling
 
 def fastaToDict(infasta):
     """
+    NOTE: This function is obsolete, and should be replaced by using SeqIO.to_dict on the SeqIO.parse iterator
+
     Takes FASTA file and returns a Python dictionary of IDs as keys and sequences as values
     :param infasta: File path for FASTA file
     :return: fastaDict: a dictionary of FASTA records
@@ -24,6 +27,8 @@ def fastaToDict(infasta):
 
 def dictToFasta(fasta_dict, filename, line_length=80):
     """
+    NOTE: This function is obsolete, and should be replaced by using SeqIO.write on the SeqIO.parse iterator
+
     Takes a Python dictionary of IDs as keys and sequences as values and outputs a FASTA file
     :param fasta_dict: Dictionary of FASTA IDs as keys, FASTA sequences as values
     :param filename: Name of FASTA file that will be written with this dictionary
@@ -57,7 +62,7 @@ def isAttribute(gene_id, feature, parent=None, child=None, hierarchy=None):
     :param gene_id: gene/protein ID
     :param feature: feature that the ID will be compared to
     :param parent: parent feature, if applicable
-    :param child:
+    :param child: child feature, if applicable
     :param hierarchy: a list that gives the order by which an annotation record's different attributes will be tried for
     use as the primary name for a given ID
     :return: True/False, name/None: First returned value is True or False depending on whether the gene/protein ID
@@ -67,12 +72,11 @@ def isAttribute(gene_id, feature, parent=None, child=None, hierarchy=None):
 
     # Initialize dictionaries for attributes
     attribute_dict = {'feature': {'gene': None, 'protein_id': None, 'Dbxref': None,  # GFF attributes
-                                  'gene_id': None, 'gene_name': None, 'transcript_id': None, 'tss_id': None},
-                      # GTF attributes
+                                  'gene_id': None, 'gene_name': None, 'transcript_id': None, 'tss_id': None},  # GTF attributes
                       'parent': {'gene': None, 'Name': None, 'gene_synonym': None, 'locus_tag': None, 'Dbxref': None,
                                  'gene_id': None, 'gene_name': None, 'transcript_id': None, 'tss_id': None}}
 
-    if not hierarchy:  # Set default hierarchy
+    if not hierarchy:  # Set default hierarchy for feature search
         hierarchy = ['feature.gene', 'parent.gene', 'parent.Name', 'parent.gene_synonym', 'feature.protein_id',
                      'parent.locus_tag', 'feature.Dbxref', 'parent.Dbxref',
                      'feature.gene_id', 'feature.gene_name', 'parent.gene_id', 'parent.gene_name',
@@ -91,38 +95,40 @@ def isAttribute(gene_id, feature, parent=None, child=None, hierarchy=None):
                                      'gene_synonym': None, 'locus_tag': None,
                                      'gene_id': None, 'gene_name': None, 'transcript_id': None, 'tss_id': None}
 
-    # Iterate through feature and parent gene records to search for all identifiers
-    for key in list(attribute_dict['feature'].keys()):
+    # Iterate through feature and parent gene records to search for all identifiers, remove entry from hierarchy if not
+    # found
+    for attribute in list(attribute_dict['feature'].keys()):
         try:
-            attribute_dict['feature'][key] = feature[key]
+            attribute_dict['feature'][attribute] = feature[attribute]
         except KeyError:
-            try:
-                hierarchy.remove('feature.%s' % key)
+            try:  # Remove attributes not found in feature from hierarchy list, if they exist in list
+                hierarchy.remove('feature.%s' % attribute)
             except ValueError:
                 pass
 
     if parent:
-        for key in list(attribute_dict['parent'].keys()):
+        for attribute in list(attribute_dict['parent'].keys()):
             try:
-                attribute_dict['parent'][key] = parent[key]
+                attribute_dict['parent'][attribute] = parent[attribute]
             except KeyError:
-                hierarchy.remove('parent.%s' % key)
+                hierarchy.remove('parent.%s' % attribute)  # Not necessary to use exception for this remove statement
 
     # Qualifiers that have been found are iterated through to look for matches
     for entry in hierarchy:
         try:
-            [key_1, key_2] = entry.split('.')
-            if key_2 == 'Dbxref' and attribute_dict[key_1][key_2]:
+            [key_1, key_2] = entry.split('.')  # Split hierarchy list entries to retrieve nested dictionary values
+            if key_2 == 'Dbxref' and attribute_dict[key_1][key_2]:  # Handle database cross-reference, None/list value
                 identifier = [db_id.split(':')[1] for db_id in attribute_dict[key_1][key_2]]
             else:
                 identifier = attribute_dict[key_1][key_2]
 
-            if gene_id in identifier:
+            if gene_id in identifier:  # If identifier found, name PNA by first entry in hierarchy, return True and name
                 name = attribute_dict[hierarchy[0].split('.')[0]][hierarchy[0].split('.')[1]][0]
                 return True, name
-        except TypeError:
+        except TypeError:  # Handle case in which attribute_dict Dbxref entry is not iterable, though this should not occur
             pass
 
+    # If no match found, return False and None for name
     return False, None
 
 
@@ -135,24 +141,33 @@ def findID(gff_db, in_list, out_bed, feature_types=('CDS',), id_type='id', full_
     :param out_bed: The path and name of the output BED file
     :param feature_types: The types of features that should be examined. If left as None, the function searches all
     features
-    :param id_type:
-    :param full_search:
+    :param id_type: A string variable with possible entries of 'id' (default) and 'position'. Using 'id' searches for
+    specific gene identifiers (gene name, database key, etc.) while position searches for feature start index within the
+    chromosome.
+    :param full_search: A boolean variable that tells the function whether to look for genes using identifiers that are
+    not the database key of the gffutils database. If 'True' is passed, the function will first look through database
+    keys, then will search other annotation types for the gene/protein IDs for which no match was found.
+    :param error_file: Optional output file that gives identifiers and their matching gene name.
     :return:
     """
 
+    # Open gffutils database file
     db = gffutils.FeatureDB(gff_db)
 
+    # Read gene/protein ID file into list
     with open(in_list) as f_handle:
         id_list = [line.rstrip() for line in f_handle]
 
-    outfile = open(out_bed, "w")
-    not_found = []
+    # Initialize output file, matches and not_found lists
+    bed_handle = open(out_bed, "w")
     matches = []
+    not_found = []
 
+    # Perform initial search of database keys (regardless of whether full_search=True)
     if id_type == 'id':
         for gene_id in id_list:
-            try:
-                feature = db[gene_id]
+            try:  # Retrieve feature information
+                feature = db[gene_id]  # Exception statement will be raised here, if at all
                 name = feature.id
                 chromosome = feature.seqid
                 start = feature.start
@@ -161,24 +176,35 @@ def findID(gff_db, in_list, out_bed, feature_types=('CDS',), id_type='id', full_
                 strand = feature.strand
                 matches.append([gene_id, name])
 
-                outfile.write('%s\t%s\t%s\t%s\t%s\t%s\n' % (chromosome, start, end, name, score, strand))
+                # Write BED file
+                bed_handle.write('%s\t%s\t%s\t%s\t%s\t%s\n' % (chromosome, start, end, name, score, strand))
             except gffutils.exceptions.FeatureNotFoundError:
+                # Add gene to not_found list if no matching database key found
                 not_found.append(gene_id)
-    else:
+    elif id_type == 'position':  # Add all genes to not_found list if 'position' selected for id_type
         not_found = id_list
+    else:
+        raise ValueError('ID type not supported, input must be "id" or "position"')
 
+    # Check for full search option and gene/protein IDs that have not been found, or for 'position' id_type
     if (full_search and not_found) or id_type == 'position':
+        # Filter database to include only selected feature types
         if feature_types == ('',):
             features = db.all_features()
         else:
             features = db.all_features(featuretype=feature_types)
 
+        # Iterate through database and not_found list
         for feature in features:
             for gene_id in not_found:
                 condition = False
                 name = None
+
+                # Use isAttribute function to search for matches within genome annotations
                 if id_type == 'id':
                     parent = None
+
+                    # Look for parent and child features to expand annotation search
                     try:
                         parent = list(db.parents(feature['ID'][0]))[0]
                     except KeyError:
@@ -200,9 +226,11 @@ def findID(gff_db, in_list, out_bed, feature_types=('CDS',), id_type='id', full_
                     except IndexError:
                         pass
 
+                    # Return True when feature match is found, with a feature name that will be used to name the PNA
                     condition, name = isAttribute(gene_id, feature, parent=parent, child=child)
 
-                elif id_type == 'position':
+                # Check for feature start position that matches gene/protein start indices
+                elif id_type == 'position':  # TODO: Chromosome ID, more efficient search, genes with same start/end
                     try:
                         if feature.start == int(gene_id) or feature.end == int(gene_id):
                             condition = True
@@ -219,6 +247,7 @@ def findID(gff_db, in_list, out_bed, feature_types=('CDS',), id_type='id', full_
                 else:
                     raise ValueError('id_type must be either "id" or "position"')
 
+                # Check if feature match is found, print message and write to BED file
                 if condition:
                     print('%s matches record for %s' % (gene_id, name))
                     chromosome = feature.seqid
@@ -227,17 +256,19 @@ def findID(gff_db, in_list, out_bed, feature_types=('CDS',), id_type='id', full_
                     score = feature.score
                     strand = feature.strand
 
-                    outfile.write('%s\t%s\t%s\t%s\t%s\t%s\n' % (chromosome, start, end, name, score, strand))
+                    bed_handle.write('%s\t%s\t%s\t%s\t%s\t%s\n' % (chromosome, start, end, name, score, strand))
                     not_found.remove(gene_id)
                     break
 
+    # Print message if any gene IDs cannot be found
     if not_found:
         print('No matching record found for gene ID(s): %s' % ', '.join(not_found))
     else:
         print('All gene IDs successfully matched to features')
 
-    outfile.close()
+    bed_handle.close()
 
+    # Write matches to error file
     if error_file:
         with open(error_file, 'w') as error_handle:
             error_handle.write('gene_id\tfeature_match_id\n')
@@ -261,12 +292,14 @@ def editBed(in_bed, out_bed, window=(-5, -5), sequence_length=12):
     :return:
     """
 
-    # Import bed file
+    # Import input BED file
     with open(in_bed) as fhandle:
         bed_list = [line.rstrip().split('\t') for line in fhandle]
 
-    outfile = open(out_bed, "w")
+    # Initialize edited BED file
+    bed_handle = open(out_bed, "w")
 
+    # Iterate through lines of input BED file
     for record in bed_list:
         rec_num = 0
         ref_id = record[0]
@@ -274,31 +307,38 @@ def editBed(in_bed, out_bed, window=(-5, -5), sequence_length=12):
         score = record[4]
         strand = record[5]
 
+        # Handle plus/minus strand for altering BED file start and end indices
         if strand == '+':
             feat_start = int(record[1])
             slide_set = list(range(window[0] - 1, window[1]))
 
+            # Iterate through the user-specified window to retrieve all target sequence indices for given antisense
+            # oligomer length within range
             for jj in slide_set:
                 start = feat_start + jj
                 end = start + sequence_length
-                feat_id = name + '_%s' % str(rec_num)
+                feat_id = name + '_%s' % str(rec_num)  # Number the target sequence names
 
-                outfile.write('%s\t%s\t%s\t%s\t%s\t%s\n' % (ref_id, str(start), str(end), feat_id, score, strand))
+                # Write to new BED file
+                bed_handle.write('%s\t%s\t%s\t%s\t%s\t%s\n' % (ref_id, str(start), str(end), feat_id, score, strand))
                 rec_num += 1
 
         elif strand == '-':
             feat_start = int(record[2])
             slide_set = list(range(window[0], window[1] + 1))
 
+            # Iterate through the user-specified window to retrieve all target sequence indices for given antisense
+            # oligomer length within range
             for jj in slide_set:
                 start = feat_start + -1 * jj
                 end = start - sequence_length
-                feat_id = name + '_%s' % str(rec_num)
+                feat_id = name + '_%s' % str(rec_num)  # Number the target sequence names
 
-                outfile.write('%s\t%s\t%s\t%s\t%s\t%s\n' % (ref_id, str(end), str(start), feat_id, score, strand))
+                # Write to new BED file
+                bed_handle.write('%s\t%s\t%s\t%s\t%s\t%s\n' % (ref_id, str(end), str(start), feat_id, score, strand))
                 rec_num += 1
 
-    outfile.close()
+    bed_handle.close()
 
 
 def processBedWindow(infile, outfile,
@@ -316,23 +356,27 @@ def processBedWindow(infile, outfile,
     still expected when an antisense molecule binds
     :param ot_count_file: Off-target count file that tabulates the number of inhibitory off-targets for each antisense
     sequence
-    :param check_homology:
-    :param homology_outfile:
+    :param check_homology: Allows user to check for matches between target gene name (designated by the name in the
+    FASTA file prior to the underscore) and a given off-target annotation
+    :param homology_outfile: Output file
     :param feature_types: The type of feature for which the user wants to find off-targets
     :return:
     """
 
-    out = open(outfile, "w")
-    out.write('PNA ID\tChromosome ID\tAlignment Strand\tAlignment Start\tFeature Start\tAlignment to STC\tFeature '
+    # Initialize output file and write header
+    out_handle = open(outfile, "w")
+    out_handle.write('PNA ID\tChromosome ID\tAlignment Strand\tAlignment Start\tFeature Start\tAlignment to STC\tFeature '
               'Info\n')
-    ot_count = {}
 
+    # Handle feature type checking
     feature_check = True
     if feature_types is None:
         feature_types = ['CDS']
     elif feature_types == ['']:
         feature_check = False
 
+    # Initialize dictionaries for off-target counting and duplicates, homology list
+    ot_count = {}
     count_duplicates = {}
     potential_homology = []
 
@@ -351,7 +395,7 @@ def processBedWindow(infile, outfile,
             record = line.split('\t')
             feature_type = record[8]
 
-            # check for only input feature types, if feature types input not left blank
+            # Check for only input feature types, if feature types input not left blank
             if feature_type in feature_types:
                 pass
             elif feature_check:
@@ -396,8 +440,8 @@ def processBedWindow(infile, outfile,
 
                 # write outfile
                 for item in out_line:
-                    out.write('%s\t' % str(item))
-                out.write('\n')
+                    out_handle.write('%s\t' % str(item))
+                out_handle.write('\n')
 
                 line_number += 1
 
@@ -419,7 +463,7 @@ def processBedWindow(infile, outfile,
         for item in potential_homology:
             print('%s\t%s\n' % (item[0], item[2]))
 
-    out.close()
+    out_handle.close()
 
     try:
         ot_handle.close()
@@ -475,7 +519,7 @@ def revComp(sequence):
     return rc_sequence
 
 
-def rnafold(fasta, outfile=None, coordinates=None):
+def rnafold(fasta, outfile=None, coordinates=None, out_dir=None):
     """
     Returns either an tab-delimited output file or a dictionary of sequence names keyed to lists of the following
     values: [0] mRNA sequence, [1] folding plot, [2] free energy of folding, [3] (optional) secondary structure fraction
@@ -485,6 +529,9 @@ def rnafold(fasta, outfile=None, coordinates=None):
     :param coordinates: (optional) coordinates of sub-sequence for which fractional folding will be returned
     :return:
     """
+
+    if out_dir:
+        os.chdir(out_dir)
 
     fold_output = subprocess.check_output(['RNAfold', fasta]).decode('utf-8')
     out_dict = {}
@@ -496,7 +543,7 @@ def rnafold(fasta, outfile=None, coordinates=None):
                 name = out_list[ii].split(' ')[0][1:]
                 sequence = out_list[ii + 1]
                 fold_plot = out_list[ii + 2].split(' ')[0]
-                energy = float(out_list[ii + 2].split(' ')[1][1:-1])
+                energy = float(out_list[ii + 2].split(' ', 1)[1][1:-1].strip())
 
                 out_dict[name] = [sequence, fold_plot, energy]
                 if coordinates:
