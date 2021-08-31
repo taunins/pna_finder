@@ -5,21 +5,7 @@ import functools
 import os
 from collections import OrderedDict
 from . import pna_pipeline_bt
-import pna_finder_dev
-
-
-#   TODO:
-#   Bacteria/virus/mammalian modules
-#       Mammalian: DNase I (ENCODE)
-#       Promoter/TSS prediction
-#   Homology function
-#   Folding analysis in GUI                 X (Check Sequence Warnings)
-#       Folding file cleanup                X
-#   Gene ontology for selection
-#   Splice awareness (HISAT2?)
-#   Pre-loaded files
-#       FASTA, GFF, essential gene lists
-#   'position' findID
+import pna_finder
 
 
 class pna_app:
@@ -29,8 +15,9 @@ class pna_app:
         Initializes tkinter frame and file search directories.
         (see manual.pdf in package root directory for more info)
         :param master:
-        :param bash_path:
-        :param home_path:
+        :param bash_path: Path to the directory in which bash.exe is located
+        :param home_path: Starting location for browse() and browseFolder() functions
+        :param shell_type:
         """
 
         self.master = master
@@ -73,7 +60,7 @@ class pna_app:
 
         Button(
             self.frame_welcome,
-            text="OK", command=self.run_pnaFinder
+            text="OK", command=self.runPNAFinder
         ).grid(row=10, column=0, sticky=W, padx=5, pady=10)
 
         Button(
@@ -81,10 +68,13 @@ class pna_app:
             text="QUIT", fg="red", command=self.frame_welcome.quit,
         ).grid(row=10, column=1, sticky=E, padx=5, pady=10)
 
-    def run_pnaFinder(self):
+    def runPNAFinder(self):
         """
         Initializes dictionaries for PNA Finder GUI labels, parameters, and filenames. Runs the PNA Finder toolbox
         function that the user has selected.
+        Function 0: Get Sequences
+        Function 1: Find Off-Targets
+        Function 2: Check Sequence Warnings
         :return:
         """
 
@@ -96,7 +86,7 @@ class pna_app:
         self.parameters = {}
         self.files = {}
 
-        # JOB NAME BOX
+        # JOB NAME BOX (USED IN ALL FUNCTIONS)
         self.labels['job_name'] = Label(
             self.top,
             text='Job Name:', font=('Arial', 11, 'bold'))
@@ -106,20 +96,21 @@ class pna_app:
         self.job_name.set('')
         Entry(self.top, width=20, textvariable=self.job_name).grid(row=0, columnspan=3, padx=20, pady=5)
 
+        # RUN SELECTED FUNCTION
         if self.function.get() == 0:
             top.title('PNA Finder - Get Sequences')
             self.function_name = 'getSequences'
-            self.app_gs()
+            self.appGetSequences()
         elif self.function.get() == 1:
             top.title('PNA Finder - Find Off-Targets')
             self.function_name = 'findOffTargets'
-            self.app_ot()
+            self.appOffTargets()
         elif self.function.get() == 2:
             top.title('PNA Finder - Check Sequence Warnings')
             self.function_name = 'sequenceWarnings'
-            self.app_warnings()
+            self.appWarnings()
 
-    def app_gs(self):
+    def appGetSequences(self):
         """
         Creates a dialog box that may be filled in with the Get Sequences function parameters and file selections
             getSequences Inputs:
@@ -145,6 +136,7 @@ class pna_app:
         """
 
         # PNA SEQUENCE PARAMETERS
+        # Sequence retrieval window labels, entry boxes, and variables
         self.labels['start'] = Label(
             self.top,
             font=('Arial', 8, 'bold'),
@@ -157,20 +149,10 @@ class pna_app:
             text='END')
         self.labels['end'].grid(row=1, column=2, sticky=E)
 
-        self.labels['window'] = Label(  # Prompt for window start index
+        self.labels['window'] = Label(
             self.top,
             text='Sequence Window:')
         self.labels['window'].grid(row=2, column=0, sticky=W, padx=5, pady=(0, 5))
-
-        self.labels['length'] = Label(  # Prompt for PNA length
-            self.top,
-            text='PNA Length:')
-        self.labels['length'].grid(row=3, column=0, sticky=W, padx=5, pady=5)
-
-        self.labels['feature_type'] = Label(  # Prompt for PNA length
-            self.top,
-            text='Annotation Record Types:')
-        self.labels['feature_type'].grid(row=4, column=0, sticky=W, padx=5, pady=5)
 
         self.parameters['start'] = StringVar()
         self.parameters['start'].set('-5')
@@ -184,15 +166,31 @@ class pna_app:
         self.window_end = Entry(self.top, width=5, textvariable=self.parameters['end'])
         self.window_end.grid(row=2, column=2, sticky=E, padx=5, pady=(0, 5))
 
+        # PNA length label, entry box, and variable
+        self.labels['length'] = Label(
+            self.top,
+            text='PNA Length:')
+        self.labels['length'].grid(row=3, column=0, sticky=W, padx=5, pady=5)
+
         self.parameters['length'] = StringVar()
         self.parameters['length'].set('12')
 
         self.pna_length = Entry(self.top, width=5, textvariable=self.parameters['length'])
         self.pna_length.grid(row=3, column=2, sticky=E, padx=5, pady=5)
 
+        # Feature type label and variable
+        self.labels['feature_type'] = Label(
+            self.top,
+            text='Annotation Record Types:')
+        self.labels['feature_type'].grid(row=4, column=0, sticky=W, padx=5, pady=5)
+
         self.parameters['feature_type'] = StringVar()
         self.parameters['feature_type'].set('CDS')
 
+        self.feature_type = Entry(self.top, width=10, textvariable=self.parameters['feature_type'])
+        self.feature_type.grid(row=4, column=2, sticky=E, padx=5, pady=5)
+
+        # Full annotation search option
         self.full_search = IntVar()
         self.full_search.set(0)
 
@@ -201,9 +199,6 @@ class pna_app:
             text='Full annotation search',
             variable=self.full_search
         ).grid(row=4, column=1, sticky=W, padx=5, pady=5)
-
-        self.feature_type = Entry(self.top, width=10, textvariable=self.parameters['feature_type'])
-        self.feature_type.grid(row=4, column=2, sticky=E, padx=5, pady=5)
 
         # ID LIST FILE SELECTION
         self.labels['id_list'] = Label(
@@ -286,28 +281,18 @@ class pna_app:
         output_button = Button(
             self.top,
             text="Select",
-            command=functools.partial(self.browse_folder, self.top, 'output',
+            command=functools.partial(self.browseFolder, self.top, 'output',
                                       title='Select Output Directory',
                                       row=12, column=1))
         output_button.grid(row=12, column=2, sticky=E, padx=5, pady=5)
 
         # STRING ANALYSIS, MELT TEMPERATURE, AND SOLUBILITY WARNINGS OPTIONS
+        # STRING option labels, variables
         self.STRING = IntVar()
         self.STRING.set(0)
 
         self.parameters['string_id'] = StringVar()
         self.parameters['string_id'].set('')
-
-        self.warnings = IntVar()
-        self.warnings.set(1)
-
-        self.temp_option = IntVar()
-        self.temp_option.set(1)
-
-        self.labels['string_id'] = Label(
-            self.top,
-            text='Species NCBI Taxonomy ID', font=("Arial", 8, "bold"))
-        self.labels['string_id'].grid(row=13, column=1, columnspan=2, sticky=E, pady=(10, 0))
 
         Checkbutton(
             self.top,
@@ -315,14 +300,27 @@ class pna_app:
             variable=self.STRING
         ).grid(row=14, column=0, sticky=W, padx=5, pady=(0, 5))
 
+        self.labels['string_id'] = Label(
+            self.top,
+            text='Species NCBI Taxonomy ID', font=("Arial", 8, "bold"))
+        self.labels['string_id'].grid(row=13, column=1, columnspan=2, sticky=E, pady=(10, 0))
+
         self.string_id = Entry(self.top, width=5, textvariable=self.parameters['string_id'])
         self.string_id.grid(row=14, column=2, sticky=E, padx=5, pady=0)
+
+        # Warnings check option label, variable
+        self.warnings = IntVar()
+        self.warnings.set(1)
 
         Checkbutton(
             self.top,
             text='Run sequence warnings analysis',
             variable=self.warnings
         ).grid(row=15, column=0, sticky=W, padx=5, pady=5)
+
+        # Temperature option label, variable
+        self.temp_option = IntVar()
+        self.temp_option.set(1)
 
         Checkbutton(
             self.top,
@@ -339,10 +337,10 @@ class pna_app:
         # WINDOW QUIT
         Button(
             self.top,
-            text="QUIT", fg="red", command=self.quit_app,
+            text="QUIT", fg="red", command=self.quitApp,
         ).grid(row=17, column=2, sticky=E, padx=5, pady=10)
 
-    def app_ot(self):
+    def appOffTargets(self):
         """
         Creates a dialog box that may be filled in with the Find Off Targets function parameters and file selections
             findOffTargets Inputs:
@@ -498,7 +496,7 @@ class pna_app:
         output_button = Button(
             self.top,
             text="Select",
-            command=functools.partial(self.browse_folder, self.top, 'output',
+            command=functools.partial(self.browseFolder, self.top, 'output',
                                       title='Select Output Directory',
                                       row=12, column=1))
         output_button.grid(row=12, column=2, sticky=E, padx=5, pady=5)
@@ -540,10 +538,10 @@ class pna_app:
         # WINDOW QUIT
         Button(
             self.top,
-            text="QUIT", fg="red", command=self.quit_app,
+            text="QUIT", fg="red", command=self.quitApp,
         ).grid(row=16, column=2, sticky=E, padx=5, pady=10)
 
-    def app_warnings(self):
+    def appWarnings(self):
         """
         Creates a dialog box that may be filled in with the Check Warnings file selections
             sequenceWarnings Inputs:
@@ -622,7 +620,7 @@ class pna_app:
         output_button = Button(
             self.top,
             text="Select",
-            command=functools.partial(self.browse_folder, self.top, 'output',
+            command=functools.partial(self.browseFolder, self.top, 'output',
                                       title='Select Output Directory',
                                       row=5, column=1))
         output_button.grid(row=5, column=2, sticky=E, padx=5, pady=5)
@@ -656,7 +654,7 @@ class pna_app:
         # WINDOW QUIT
         Button(
             self.top,
-            text="QUIT", fg="red", command=self.quit_app,
+            text="QUIT", fg="red", command=self.quitApp,
         ).grid(row=8, column=2, sticky=E, padx=5, pady=10)
 
     def browse(self, frame, filekey, title='Select file', filetypes=(("all files", "*.*"),),
@@ -743,7 +741,7 @@ class pna_app:
 
         return
 
-    def browse_folder(self, frame, filekey, title='Select folder', row=0, column=0):
+    def browseFolder(self, frame, filekey, title='Select folder', row=0, column=0):
         """
         Function prompts user to select a folder for input into the PNA Finder toolbox, and records choice in GUI display
         :param frame: Tkinter active frame
@@ -790,7 +788,7 @@ class pna_app:
 
         return
 
-    def check_inputs(self):
+    def checkInputs(self):
         """
         Function checks the inputs for PNA tools to determine whether the necessary inputs are submitted in the
         correct format
@@ -911,7 +909,7 @@ class pna_app:
                     except KeyError:
                         pass
 
-                elif p_key == 'mismatch':
+                elif p_key == 'mismatch' or p_key == 'length':
                     submit_dict[p_key] = [submit_dict[p_key]]
 
             except ValueError:
@@ -922,17 +920,19 @@ class pna_app:
                     if p_key == 'end' and self.parameters[p_key].get() == '':
                         submit_dict[p_key] = self.parameters[p_key].get()
                         continue
-                    elif p_key == 'mismatch':
-                        try:
-                            mismatch_list = []
-                            for mismatch in self.parameters[p_key].get().split(','):
-                                mismatch_list += [int(mismatch.strip())]
-                            submit_dict[p_key] = mismatch_list
-                            continue
-                        except ValueError:
-                            check = False
-                            check_warnings[p_key] = 'Mismatch must be integer or comma-separated list of integers'
-                            continue
+
+                if p_key == 'mismatch' or p_key == 'length':
+                    try:
+                        entry_list = []
+                        for value in self.parameters[p_key].get().split(','):
+                            entry_list += [int(value.strip())]
+                        submit_dict[p_key] = entry_list
+                        continue
+                    except ValueError:
+                        check = False
+                        check_warnings[p_key] = '%s must be integer or comma-separated list of integers' % \
+                                                p_dict[p_key]
+                        continue
 
                 if p_key == 'feature_type':
                     submit_dict[p_key] = self.parameters[p_key].get().strip()
@@ -958,7 +958,7 @@ class pna_app:
                         check = False
                         check_warnings[f_key] = 'Wrong filetype selected for Annotation File Option'
 
-                    elif self.function.get() and f_key == 'assembly' and \
+                    elif self.function.get() == 1 and f_key == 'assembly' and \
                             ((self.index_option.get() and self.files[f_key].rsplit('.', 1)[1] != 'ebwt' or
                               (not self.index_option.get() and self.files[f_key].rsplit('.', 1)[1] not in ('fa', 'fna',
                                                                                                            'fasta')))):
@@ -987,13 +987,13 @@ class pna_app:
 
     def submit(self):
         """
-        Calls the self.check_inputs() function and displays warning/error messages if input criteria are not satisfied.
+        Calls the self.checkInputs() function and displays warning/error messages if input criteria are not satisfied.
         If input criteria are satisfied, the function submits the job to the external pna_pipeline.py script according
         to the variable self.function.
         :return:
         """
 
-        check, submit_dict, check_warnings, check_messages = self.check_inputs()
+        check, submit_dict, check_warnings, check_messages = self.checkInputs()
 
         for l_key in self.labels:
             self.labels[l_key].config(fg='black')
@@ -1052,7 +1052,7 @@ class pna_app:
             print('Finished at %s' % end_time)
             print('Run execution time: %s' % (end_time - start_time))
 
-    def quit_app(self):
+    def quitApp(self):
         self.top.destroy()
         self.master.deiconify()
 
@@ -1068,7 +1068,7 @@ def startup():
     warning_text = 'The file "start_info.txt" has been deleted or moved.'
 
     try:
-        start_handle = open('%s/start_info.txt' % pna_finder_dev.__path__[0], 'r')
+        start_handle = open('%s/start_info.txt' % pna_finder.__path__[0], 'r')
         warning_text = 'The file "start_info.txt" is improperly built.'
 
         start_dict = {}
@@ -1080,7 +1080,7 @@ def startup():
         bash_path = start_dict['bash']
         shell_type = start_dict['shell']
 
-    except IOError:
+    except IOError or KeyError or IndexError:
         start_warning = Tk()
         start_warning.title('PNA Finder Toolbox')
 
