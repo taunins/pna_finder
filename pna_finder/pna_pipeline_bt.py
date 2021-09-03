@@ -3,6 +3,7 @@
 
 # Import the necessary packages
 from . import string_genes as sg
+from Bio import SeqIO, Seq
 from .align_tools import *
 from . import pna_tools
 from . import pna_solubility as sol
@@ -48,7 +49,7 @@ def getSequences(submit_dict):
 
     # Retrieve job parameters
     window = (submit_dict['start'], submit_dict['end'])
-    length = submit_dict['length']
+    length = tuple(submit_dict['length'])
 
     feature_types = submit_dict['feature_type'].split(',')
     for ii in range(len(feature_types)):
@@ -92,6 +93,7 @@ def getSequences(submit_dict):
             name_change = True
             out_dir = out_base + ' (%s)' % str(out_num + 1)
             out_num += 1
+    os.mkdir(out_dir + '/intermediate_files/')
 
     # Notify user of output folder name change
     if name_change:
@@ -110,8 +112,8 @@ def getSequences(submit_dict):
 
     # Initialize output file names
     filebase = submit_dict['id_list'].split('/')[-1].split('.')[0]
-    bedfile = out_dir + '/' + filebase + '.bed'
-    bedfile_edited = out_dir + '/' + filebase + '.edit.bed'
+    bedfile = out_dir + '/intermediate_files/' + filebase + '.bed'
+    bedfile_edited = out_dir + '/intermediate_files/' + filebase + '.edit.bed'
     fasta_outfile = out_dir + '/' + filebase + '.fa'
     sequence_outfile = out_dir + '/' + filebase + '.out'
     string_outfile = None
@@ -139,7 +141,7 @@ def getSequences(submit_dict):
              version=bedtools_version)
 
     # Run sequence solubility checks and STRING interaction finder
-    sequence_dict = pna_tools.fastaToDict(fasta_outfile)
+    sequence_dict = SeqIO.to_dict(SeqIO.parse(fasta_outfile, "fasta"))
     sequence_handle = open(sequence_outfile, 'w')
     sequence_handle.write('Name\tSequence')
 
@@ -161,10 +163,10 @@ def getSequences(submit_dict):
     if not warnings_option and not temperature_option and not string_option:
         pass
     else:
-        for key in list(sequence_dict.keys()):
-            name = key.rsplit('_', 1)[0]
-            sequence = pna_tools.revComp(sequence_dict[key])
-            sequence_handle.write('%s\t%s\t' % (key, sequence))
+        for pna in list(sequence_dict.keys()):
+            name = pna.rsplit('_', 1)[0]
+            sequence = str(sequence_dict[pna].seq.reverse_complement())
+            sequence_handle.write('%s\t%s\t' % (pna, sequence))
 
             # Check for solubility, complement warnings
             if warnings_option:
@@ -233,7 +235,7 @@ def findOffTargets(submit_dict):
 
     # Retrieve job parameters
     window = (submit_dict['start'], submit_dict['end'])
-    mismatches = submit_dict['mismatch']
+    mismatches = tuple(submit_dict['mismatch'])
 
     feature_types = submit_dict['feature_type'].split(',')
     for ii in range(len(feature_types)):
@@ -268,7 +270,7 @@ def findOffTargets(submit_dict):
             name_change = True
             out_dir = out_base + ' (%s)' % str(out_num + 1)
             out_num += 1
-    os.mkdir(out_dir + '/sambam/')
+    os.mkdir(out_dir + '/intermediate_files/')
 
     # Notify user of output folder name change
     if name_change:
@@ -294,21 +296,21 @@ def findOffTargets(submit_dict):
         raise ValueError('Something has gone horribly wrong!')
 
     # Find PNA length
-    targets_dict = pna_tools.fastaToDict(targets)
+    targets_dict = SeqIO.to_dict(SeqIO.parse(targets, 'fasta'))
     length_dict = {}
     sam_dict = {}
 
-    for sequence in targets_dict:
-        length = str(len(targets_dict[sequence]))
+    for pna in targets_dict:
+        length = str(len(targets_dict[pna]))
         try:
-            length_dict[length][sequence] = targets_dict[sequence]
-            if '%s.rev' % sequence not in length_dict:  # Add reverse sequence for N to 5' parallel alignment
-                length_dict[length]['%s.rev' % sequence] = targets_dict[sequence][::-1]
+            length_dict[length][pna] = targets_dict[pna]
+            if '%s.rev' % pna not in length_dict:  # Add reverse sequence for N to 5' parallel alignment
+                length_dict[length]['%s.rev' % pna] = targets_dict[pna][::-1]
         except KeyError:
             length_dict[length] = {}
-            length_dict[length][sequence] = targets_dict[sequence]
-            if '%s.rev' % sequence not in length_dict:  # Add reverse sequence for N to 5' parallel alignment
-                length_dict[length]['%s.rev' % sequence] = targets_dict[sequence][::-1]
+            length_dict[length][pna] = targets_dict[pna]
+            if '%s.rev' % pna not in length_dict:  # Add reverse sequence for N to 5' parallel alignment
+                length_dict[length]['%s.rev' % pna] = targets_dict[pna][::-1]
 
     # Check Bowtie version
     bash_check = ['%s/bash' % bash_dir, '--login', '-c', 'bowtie --version']
@@ -324,8 +326,8 @@ def findOffTargets(submit_dict):
             print('Separating FASTA file for PNA length %s...' % length)
 
         # Construct FASTA file for given PNA length
-        temp_targets = out_dir + '/' + filebase + '.%smer.fa' % length
-        pna_tools.dictToFasta(length_dict[length], temp_targets)
+        temp_targets = out_dir + '/intermediate_files/' + filebase + '.%smer.fa' % length
+        SeqIO.write(length_dict[length].values(), temp_targets, 'fasta')
         temp_len = length
 
         # Add Bowtie flags to set FASTA file input, set seed length, set "all alignments" output
@@ -339,8 +341,8 @@ def findOffTargets(submit_dict):
             flags += ['-n', str(mismatch)]
 
             # Initialize SAM file naming variable, SAM output folder, error file folder
-            sambase = out_dir + '/sambam/%sMM/' % mismatch + filebase
-            os.mkdir('%s/sambam/%sMM/' % (out_dir, mismatch))
+            sambase = out_dir + '/intermediate_files/%sMM/' % mismatch + filebase
+            os.mkdir('%s/intermediate_files/%sMM/' % (out_dir, mismatch))
             os.mkdir('%s/error_files/%sMM/' % (out_dir, mismatch))
 
             # Set intermediate file names
@@ -459,7 +461,7 @@ def findOffTargets(submit_dict):
         pna_tools.processBedWindow(bedfile,
                                    outfile,
                                    dist_filter=window[1],
-                                   ot_count_file=countfile,
+                                   countfile=countfile,
                                    homology_outfile=homology_outfile,
                                    check_homology=check_homology,
                                    feature_types=feature_types)
@@ -467,7 +469,7 @@ def findOffTargets(submit_dict):
     # Remove intermediate files if option specified (useful for large mammalian genome files)
     if remove_files:
         shutil.rmtree('%s/error_files' % out_dir)
-        shutil.rmtree('%s/sambam' % out_dir)
+        shutil.rmtree('%s/intermediate_files' % out_dir)
 
     return
 
@@ -493,17 +495,17 @@ def sequenceWarnings(submit_dict):
     temperature_option = submit_dict['temp_option']
     rnafold_option = submit_dict['rnafold_option']
 
-    # Initialize PNA target dictionary
+    # Parse PNA option
     if submit_dict['pna_option'] == 0:
         pna_targets = submit_dict['pna_list']
-        target_dict = pna_tools.fastaToDict(pna_targets)
+        target_dict = SeqIO.to_dict(SeqIO.parse(pna_targets, 'fasta'))
     elif submit_dict['pna_option'] == 1:
         pna_list = submit_dict['pna_list']
         target_dict = dict()
         with open(pna_list) as pna_handle:
             for line in pna_handle:
-                [key, value] = line.rstrip().split('\t')
-                target_dict[key] = pna_tools.revComp(value)
+                [pna, value] = line.rstrip().split('\t')
+                target_dict[pna] = SeqIO.SeqRecord(seq=value, id=pna)
     else:
         raise ValueError('Something has gone horribly wrong!')
 
@@ -547,7 +549,7 @@ def sequenceWarnings(submit_dict):
 
         # Take RNA sequences from file, initialize dictionary of sequences
         rna_sequences = submit_dict['rnafold']
-        rna_dict = pna_tools.fastaToDict(rna_sequences)
+        rna_dict = SeqIO.to_dict(SeqIO.parse(rna_sequences, 'fasta'))
 
         # Initialize folding output folder and files
         fold_dir = out_dir + '/folding_files'
@@ -564,8 +566,8 @@ def sequenceWarnings(submit_dict):
     # Iterate through PNA list
     for pna in list(target_dict.keys()):
         # Retrieve PNA target and sequence from target_dict
-        target = target_dict[pna]
-        sequence = pna_tools.revComp(target_dict[pna])
+        target = str(target_dict[pna].seq)
+        sequence = str(Seq.Seq(target).reverse_complement())
         sequence_handle.write('%s\t%s\t%s\t' % (pna, sequence, target))
 
         # Check for solubility, complement warnings
@@ -584,7 +586,7 @@ def sequenceWarnings(submit_dict):
                 rna = rna_dict[pna]
 
                 # Look for PNA target sequence in RNA sequence, skip if not found
-                start = rna.find(target)
+                start = str(rna.seq).find(target)
                 if start == -1:
                     warnings.warn('Target sequence for PNA name "%s" not found in RNA, skipping...' % pna)
                     continue
@@ -594,7 +596,7 @@ def sequenceWarnings(submit_dict):
 
                 # Create temporary FASTA file to be used in the RNAfold program
                 temp_fasta = fold_dir + '/%s_rna.fa' % pna
-                pna_tools.dictToFasta({pna: rna}, temp_fasta)
+                SeqIO.write(rna, temp_fasta, 'fasta')
 
                 # Run RNAfold, place outputs in fold_dict dictionary
                 fold_dict = pna_tools.rnafold(temp_fasta, coordinates=coordinates, out_dir=fold_dir)
