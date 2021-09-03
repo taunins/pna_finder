@@ -14,7 +14,7 @@ def fastaToDict(infasta):
 
     Takes FASTA file and returns a Python dictionary of IDs as keys and sequences as values
     :param infasta: File path for FASTA file
-    :return: fastaDict: a dictionary of FASTA records
+    :return: Dictionary of FASTA records
     """
 
     fasta_dict = defaultdict()
@@ -32,7 +32,7 @@ def dictToFasta(fasta_dict, filename, line_length=80):
     Takes a Python dictionary of IDs as keys and sequences as values and outputs a FASTA file
     :param fasta_dict: Dictionary of FASTA IDs as keys, FASTA sequences as values
     :param filename: Name of FASTA file that will be written with this dictionary
-    :param line_length:
+    :param line_length: Length of FASTA file line, 80 as default
     :return:
     """
 
@@ -52,6 +52,8 @@ def dictToFasta(fasta_dict, filename, line_length=80):
                 out_fasta.write('>%s\n%s\n' % (key, fasta_dict[key]))
     else:
         raise TypeError('dictToFasta accepts a dict input (arg 1) and str input file path (arg 2)')
+
+    return
 
 
 # Match ID to GFF/GTF file
@@ -132,7 +134,11 @@ def isAttribute(gene_id, feature, parent=None, child=None, hierarchy=None):
     return False, None
 
 
-def findID(gff_db, in_list, out_bed, feature_types=('CDS',), id_type='id', full_search=False, error_file=None):
+def findID(gff_db, in_list, out_bed,
+           feature_types=('CDS',),
+           id_type='id',
+           full_search=False,
+           error_file=None):
     """
     Takes a path to a GFF3 file database (already created through gffutils.createdb function) and a file path for an ID
     list formatted as a single column list) of gene/protein identifiers, and outputs a .bed file of those records
@@ -278,10 +284,14 @@ def findID(gff_db, in_list, out_bed, feature_types=('CDS',), id_type='id', full_
                 error_handle.write('%s\tNone\n' % gene_id)
         error_handle.close()
 
+    return
+
 
 # BEDTools file helpers
 
-def editBed(in_bed, out_bed, window=(-5, -5), sequence_length=12):
+def editBed(in_bed, out_bed,
+            window=(-5, -5),
+            sequence_length=(12,)):
     """
     Takes input BED file (typically of targeted features/sequences produced by findID) and produces new BED file of
     enumerated sequences targeting the full window specified relative to the start codon
@@ -301,7 +311,6 @@ def editBed(in_bed, out_bed, window=(-5, -5), sequence_length=12):
 
     # Iterate through lines of input BED file
     for record in bed_list:
-        rec_num = 0
         ref_id = record[0]
         name = record[3]
         score = record[4]
@@ -314,14 +323,21 @@ def editBed(in_bed, out_bed, window=(-5, -5), sequence_length=12):
 
             # Iterate through the user-specified window to retrieve all target sequence indices for given antisense
             # oligomer length within range
-            for jj in slide_set:
-                start = feat_start + jj
-                end = start + sequence_length
-                feat_id = name + '_%s' % str(rec_num)  # Number the target sequence names
+            for length in sequence_length:
+                rec_num = 0
+                for jj in slide_set:
+                    start = feat_start + jj
+                    end = start + length
 
-                # Write to new BED file
-                bed_handle.write('%s\t%s\t%s\t%s\t%s\t%s\n' % (ref_id, str(start), str(end), feat_id, score, strand))
-                rec_num += 1
+                    if len(sequence_length) == 1:
+                        feat_id = name + '_%s' % str(rec_num)  # Number the target sequence names
+                        rec_num += 1
+                    else:
+                        feat_id = name + '_%s.%s' % (str(length), str(rec_num))     # Number by PNA length as well
+                        rec_num += 1
+
+                    # Write to new BED file
+                    bed_handle.write('%s\t%s\t%s\t%s\t%s\t%s\n' % (ref_id, str(start), str(end), feat_id, score, strand))
 
         elif strand == '-':
             feat_start = int(record[2])
@@ -329,32 +345,40 @@ def editBed(in_bed, out_bed, window=(-5, -5), sequence_length=12):
 
             # Iterate through the user-specified window to retrieve all target sequence indices for given antisense
             # oligomer length within range
-            for jj in slide_set:
-                start = feat_start + -1 * jj
-                end = start - sequence_length
-                feat_id = name + '_%s' % str(rec_num)  # Number the target sequence names
+            for length in sequence_length:
+                rec_num = 0
+                for jj in slide_set:
+                    start = feat_start + -1 * jj
+                    end = start - length
 
-                # Write to new BED file
-                bed_handle.write('%s\t%s\t%s\t%s\t%s\t%s\n' % (ref_id, str(end), str(start), feat_id, score, strand))
-                rec_num += 1
+                    if len(sequence_length) == 1:
+                        feat_id = name + '_%s' % str(rec_num)  # Number the target sequence names
+                        rec_num += 1
+                    else:
+                        feat_id = name + '_%s.%s' % (str(length), str(rec_num))  # Number by PNA length as well
+                        rec_num += 1
+
+                    # Write to new BED file
+                    bed_handle.write('%s\t%s\t%s\t%s\t%s\t%s\n' % (ref_id, str(end), str(start), feat_id, score, strand))
 
     bed_handle.close()
+    return
 
 
-def processBedWindow(infile, outfile,
+def processBedWindow(bedfile, outfile,
                      dist_filter=20,
-                     ot_count_file=None,
+                     countfile=None,
                      check_homology=False,
                      homology_outfile=None,
                      feature_types=None):
     """
     Processes the output from a BEDTools window function to determine which feature-overlapping alignments are likely
     to cause antisense gene expression/mRNA translation inhibition.
-    :param infile: Input BED file that will be analyzed
+    :param bedfile: Input BED file that will be analyzed
     :param outfile: Output .out file that will display filtered and processed results
     :param dist_filter: The distance downstream from the given feature start where expression/translation inhibition is
     still expected when an antisense molecule binds
-    :param ot_count_file: Off-target count file that tabulates the number of inhibitory off-targets for each antisense
+    :param countfile: Off-target count file that tabulates the number of inhibitory off-targets for each antisense
     sequence
     :param check_homology: Allows user to check for matches between target gene name (designated by the name in the
     FASTA file prior to the underscore) and a given off-target annotation
@@ -365,14 +389,15 @@ def processBedWindow(infile, outfile,
 
     # Initialize output file and write header
     out_handle = open(outfile, "w")
-    out_handle.write('PNA ID\tChromosome ID\tAlignment Strand\tAlignment Start\tFeature Start\tAlignment to STC\tFeature '
-              'Info\n')
+    out_handle.write('PNA ID\tChromosome ID\tAlignment Strand\tAlignment Start\tFeature Start\tRelative Position\t'
+                     'Feature Info\n')
 
-    # Handle feature type checking
+    # Handle feature checking function
     feature_check = True
     if feature_types is None:
         feature_types = ['CDS']
     elif feature_types == ['']:
+        # Skip feature filtering if feature_type variable left blank
         feature_check = False
 
     # Initialize dictionaries for off-target counting and duplicates, homology list
@@ -380,34 +405,37 @@ def processBedWindow(infile, outfile,
     count_duplicates = {}
     potential_homology = []
 
+    # Initialize off-target output and homology output handle variables
     ot_handle = None
-    h_handle = None
+    homology_handle = None
     line_number = 2
 
+    # Check whether to filter feature alignments from downstream
     if dist_filter == '':
         distance_pass = True
     else:
         distance_pass = False
 
-    log_mismatch = False  # TODO
-    with open(infile) as fhandle:
-        for line in fhandle:
+    # Open BED file, iterate line by line
+    with open(bedfile, 'r') as bed_handle:
+        for line in bed_handle:
+            # Split BED file line into columns, retrieve feature type for subsequent filter step
             record = line.split('\t')
             feature_type = record[8]
 
-            # Check for only input feature types, if feature types input not left blank
+            # Skip loop if alignment feature type does not match input feature types
             if feature_type in feature_types:
                 pass
             elif feature_check:
                 continue
-            else:
-                pass
 
+            # Retrieve relevant BED file fields for output file
             pna_name = record[3]
             ref_id = record[0]
             strand = record[5]
-            feat_info = record[14].split('\n')[0]
+            feat_info = record[14].split('\n')[0]   # Remove line break from feature info
 
+            # Check alignment strand, use appropriate feature start and end to calculate alignment distance
             if strand == '+':
                 align_start = record[1]
                 feat_start = record[9]
@@ -419,59 +447,65 @@ def processBedWindow(infile, outfile,
             else:
                 raise IndexError('Error reading genome strand id')
 
+            # Check whether feature is within distance filter limit
             if distance_pass or distance < dist_filter:
+                # Compile information for output file
                 out_line = [pna_name, ref_id, strand, align_start, feat_start, str(distance), feat_info]
 
-                # keep count of number of off-targets for each PNA
-                if pna_name not in list(ot_count.keys()):
-                    ot_count[pna_name] = 1
-                    count_duplicates[pna_name] = {}
-                    count_duplicates[pna_name][ref_id] = [feat_start]
-                elif ref_id not in list(count_duplicates[pna_name].keys()):
-                    count_duplicates[pna_name][ref_id] = []
+                # Keep count of number of off-targets for each PNA
+                if countfile:
+                    if pna_name not in list(ot_count.keys()):
+                        ot_count[pna_name] = 1
+                        count_duplicates[pna_name] = {}     # Initialize new dictionary within count_duplicates dictionary for PNA name
+                        count_duplicates[pna_name][ref_id] = [feat_start]   # Add feature start index (within list) to chromosome/reference dictionary entry
+                    elif ref_id not in list(count_duplicates[pna_name].keys()):
+                        count_duplicates[pna_name][ref_id] = []     # Add empty list to new chromosome/reference entry for existing PNA name dictionary
 
-                if feat_start not in count_duplicates[pna_name][ref_id]:
-                    ot_count[pna_name] += 1
-                    count_duplicates[pna_name][ref_id] += [feat_start]
+                    # Count off-target alignment for new feature start. Do not count if it has the same start index as
+                    # another feature on the same chromosome/reference (this avoids multiple counting of human alternate RNA
+                    # transcripts)
+                    if feat_start not in count_duplicates[pna_name][ref_id]:
+                        ot_count[pna_name] += 1
+                        count_duplicates[pna_name][ref_id] += [feat_start]
 
-                if check_homology:  # TODO: Improve this
+                # Check for potential PNA target feature homology in strain by using a simple substring search
+                if check_homology:  # TODO: Improve homology check by parsing feature IDs, allowing keyword inputs
                     if pna_name.split('_')[0].upper() in feat_info.upper():
                         potential_homology += [[pna_name, line_number, feat_info]]
 
-                # write outfile
-                for item in out_line:
-                    out_handle.write('%s\t' % str(item))
+                # Write to outfile
+                for entry in out_line:
+                    out_handle.write('%s\t' % str(entry))
                 out_handle.write('\n')
 
                 line_number += 1
 
-    if ot_count_file:
-        ot_handle = open(ot_count_file, 'w')
+    out_handle.close()
+
+    # Write to off-target count file
+    if countfile:
+        ot_handle = open(countfile, 'w')
         for key in list(ot_count.keys()):
             ot_handle.write('%s\t%s\n' % (key, ot_count[key]))
-    else:
-        for key in list(ot_count.keys()):
-            print(('%s\t%s' % (key, ot_count[key])))
-
-    if check_homology and homology_outfile:
-        h_handle = open(homology_outfile, 'w')
-        h_handle.write('PNA ID\tOutfile Line Number\tFeature Info\n')
-        for item in potential_homology:
-            h_handle.write('%s\t%s\t%s\n' % (item[0], item[1], item[2]))
-    elif check_homology and not homology_outfile:
-        print('Potential alignments to homologous features:')
-        for item in potential_homology:
-            print('%s\t%s\n' % (item[0], item[2]))
-
-    out_handle.close()
 
     try:
         ot_handle.close()
     except AttributeError:
         pass
 
+    # Write homology output to file or print
+    if check_homology and homology_outfile:
+        homology_handle = open(homology_outfile, 'w')
+        homology_handle.write('PNA ID\tOutfile Line Number\tFeature Info\n')
+        for entry in potential_homology:
+            homology_handle.write('%s\t%s\t%s\n' % (entry[0], entry[1], entry[2]))
+    elif check_homology and not homology_outfile:
+        print('Potential alignments to homologous features:')
+        for entry in potential_homology:
+            print('%s\t%s\n' % (entry[0], entry[2]))
+
     try:
-        h_handle.close()
+        homology_handle.close()
     except AttributeError:
         pass
 
@@ -482,18 +516,23 @@ def processBedWindow(infile, outfile,
 
 def revComp(sequence):
     """
+    NOTE: This function is obsolete, and should be replaced by using reverse_complement() on a Bio.Seq object
 
-    :param sequence:
-    :return:
+    Returns the reverse complement of a DNA or RNA sequence
+    :param sequence: DNA/RNA sequence
+    :return: Reverse complement sequence string
     """
 
+    # Standardize entry to be uppercase
     try:
         sequence = sequence.upper()
     except AttributeError:
         raise TypeError('rev_comp takes a nucleobase sequence string')
 
+    # Initialize output variable
     rc_sequence = ''
 
+    # Check for mixed DNA and RNA sequence, set nucleic acid type
     if 'T' in sequence and 'U' in sequence:
         raise ValueError('Mixed RNA and DNA sequences')
     elif 'U' in sequence:
@@ -501,6 +540,7 @@ def revComp(sequence):
     else:
         seq_type = 'DNA'
 
+    # Iterate backwards through input sequence, append complement to reverse complement output
     for letter in sequence[::-1]:
         if letter == 'A':
             if seq_type == 'DNA':
@@ -527,16 +567,24 @@ def rnafold(fasta, outfile=None, coordinates=None, out_dir=None):
     :param fasta: mRNA sequence file
     :param outfile: (optional) path to output file
     :param coordinates: (optional) coordinates of sub-sequence for which fractional folding will be returned
-    :return:
+    :param out_dir: (optional) directory in which to place the .ps and .ss RNA folding files
+    :return: Dictionary with FASTA file id as the key, and a list of [sequence, fold_plot, energy] as the value
     """
 
+    # Change working directory to the input out directory if provided. This will place intermediate folding files into
+    # this directory
     if out_dir:
-        os.chdir(out_dir)
+        try:
+            os.chdir(out_dir)
+        except FileNotFoundError:
+            warnings.warn('Output directory does not exist, file outputs placed in current working directory')
 
+    # Pass FASTA file to RNAfold program in command line, process output
     fold_output = subprocess.check_output(['RNAfold', fasta]).decode('utf-8')
     out_dict = {}
     out_list = fold_output.split('\r\n')
 
+    # Process output list and place variables in output dictionary
     for ii in range(len(out_list)):
         try:
             if out_list[ii][0] == '>':
@@ -556,6 +604,7 @@ def rnafold(fasta, outfile=None, coordinates=None, out_dir=None):
         except IndexError:
             pass
 
+    # Write output to file if provided
     if outfile:
         with open(outfile, 'w') as out_handle:
             out_handle.write('Name\tSequence\tFold Plot\tEnergy')
@@ -568,8 +617,8 @@ def rnafold(fasta, outfile=None, coordinates=None, out_dir=None):
                 for element in out_dict[name]:
                     out_handle.write('\t%s' % element)
                 out_handle.write('\n')
-    else:
-        return out_dict
+
+    return out_dict
 
 
 def truncateFasta(fasta, gff_db, out_fasta, out_gff, out_info=None,
